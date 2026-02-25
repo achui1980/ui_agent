@@ -1,0 +1,24 @@
+[
+  {
+    "test_id": "TC001_basic_application",
+    "description": "Basic insurance application with personal information",
+    "expected_outcome": "success",
+    "data": {
+      "first_name": "John",
+      "last_name": "Smith",
+      "email": "john.smith@example.com",
+      "phone": "555-123-4567",
+      "date_of_birth": "01/15/1990",
+      "gender": "Male",
+      "address": "123 Main Street",
+      "city": "Springfield",
+      "state": "Illinois",
+      "zip_code": "62701",
+      "coverage_type": "Individual",
+      "plan_type": "Gold",
+      "annual_income": "75000",
+      "tobacco_use": "No",
+      "agree_terms": "true"
+    }
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {
+    "test_id": "demoqa_student_registration",
+    "description": "Student registration form on DemoQA practice page",
+    "expected_outcome": "success",
+    "data": {
+      "first_name": "John",
+      "last_name": "Smith",
+      "email": "john.smith@example.com",
+      "gender": "Male",
+      "mobile": "1234567890",
+      "date_of_birth": "15 Jan 1990",
+      "subjects": "Maths",
+      "hobbies": "Sports",
+      "current_address": "123 Main Street, Springfield",
+      "state": "NCR",
+      "city": "Delhi"
+    }
+  }
+]

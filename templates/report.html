@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Report: {{ report.test_case_id }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        .container { max-width: 960px; margin: 0 auto; }
+        h1 { margin-bottom: 20px; }
+        .summary { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .summary h2 { margin-bottom: 16px; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 4px; font-weight: 600; font-size: 14px; }
+        .badge-pass { background: #d4edda; color: #155724; }
+        .badge-fail { background: #f8d7da; color: #721c24; }
+        .badge-partial { background: #fff3cd; color: #856404; }
+        .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+        .meta dt { font-weight: 600; }
+        .meta dd { margin-bottom: 8px; }
+        .page-card { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .page-card h3 { margin-bottom: 12px; }
+        .error-list { list-style: none; }
+        .error-list li { background: #f8d7da; padding: 8px 12px; border-radius: 4px; margin-bottom: 4px; font-size: 14px; }
+        .field-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+        .field-table th, .field-table td { padding: 8px; text-align: left; border-bottom: 1px solid #eee; }
+        .field-table th { background: #f8f9fa; }
+        .status-success { color: #155724; }
+        .status-failed { color: #721c24; }
+        .status-healed { color: #856404; }
+        .screenshots { margin-top: 20px; }
+        .screenshots img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 12px; }
+        footer { margin-top: 30px; text-align: center; color: #999; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>UI Form Test Report</h1>
+
+    <div class="summary">
+        <h2>
+            {{ report.test_case_id }}
+            {% if report.overall_status == 'PASS' %}
+            <span class="badge badge-pass">PASS</span>
+            {% elif report.overall_status == 'FAIL' %}
+            <span class="badge badge-fail">FAIL</span>
+            {% else %}
+            <span class="badge badge-partial">PARTIAL</span>
+            {% endif %}
+        </h2>
+        <dl class="meta">
+            <dt>URL</dt>
+            <dd>{{ report.url }}</dd>
+            <dt>Duration</dt>
+            <dd>{{ report.duration_seconds }}s</dd>
+            <dt>Pages Completed</dt>
+            <dd>{{ report.pages_completed }} / {{ report.total_pages }}</dd>
+            <dt>Start Time</dt>
+            <dd>{{ report.start_time }}</dd>
+            <dt>End Time</dt>
+            <dd>{{ report.end_time }}</dd>
+        </dl>
+    </div>
+
+    {% for page in report.pages %}
+    <div class="page-card">
+        <h3>
+            Page {{ page.page_index + 1 }}: {{ page.page_id }}
+            {% if page.verification_passed %}
+            <span class="badge badge-pass">PASS</span>
+            {% else %}
+            <span class="badge badge-fail">FAIL</span>
+            {% endif %}
+            {% if page.retry_count > 0 %}
+            <span class="badge badge-partial">Retries: {{ page.retry_count }}</span>
+            {% endif %}
+        </h3>
+
+        {% if page.fields_filled %}
+        <table class="field-table">
+            <thead>
+                <tr>
+                    <th>Field</th>
+                    <th>Selector</th>
+                    <th>Value</th>
+                    <th>Status</th>
+                    <th>Error</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in page.fields_filled %}
+                <tr>
+                    <td>{{ f.field_id }}</td>
+                    <td><code>{{ f.selector }}</code></td>
+                    <td>{{ f.value }}</td>
+                    <td class="status-{{ f.status }}">{{ f.status }}</td>
+                    <td>{{ f.error_message }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        {% if page.validation_errors %}
+        <h4 style="margin-top: 12px;">Validation Errors</h4>
+        <ul class="error-list">
+            {% for err in page.validation_errors %}
+            <li>{{ err }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if report.screenshots %}
+    <div class="screenshots">
+        <h2>Screenshots</h2>
+        {% for ss in report.screenshots %}
+        <p><strong>{{ ss }}</strong></p>
+        <img src="{{ ss }}" alt="Screenshot">
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <footer>
+        Generated by UI Agent &mdash; CrewAI Form Testing System
+    </footer>
+</div>
+</body>
+</html>

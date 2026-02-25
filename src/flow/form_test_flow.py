@@ -1,0 +1,301 @@
+from __future__ import annotations
+
+import json
+import time
+from typing import Any
+
+from crewai.flow.flow import Flow, listen, router, start
+from loguru import logger
+from pydantic import BaseModel
+
+from src.browser.browser_manager import BrowserManager
+from src.config import Settings, get_settings
+from src.flow.page_crew import build_page_crew
+from src.models import TestCase, TestReport, PageResult, FieldActionResult
+from src.parsers.parser_factory import parse_test_file
+from src.reporting.json_report import save_json_report
+from src.reporting.html_report import save_html_report
+
+
+class FormTestState(BaseModel):
+    """Flow global state."""
+    # Input
+    test_input_path: str = ""
+    target_url: str = ""
+
+    # Parsed test case
+    test_case_data: dict[str, str] = {}
+    test_case_id: str = ""
+    description: str = ""
+    expected_outcome: str = "success"
+
+    # Page loop state
+    current_page_index: int = 0
+    consumed_fields: list[str] = []
+    page_results: list[dict] = []
+    max_pages: int = 50
+
+    # Current page state
+    current_page_id: str = ""
+    verification_passed: bool = False
+    retry_count: int = 0
+    max_retries: int = 3
+    validation_errors: list[str] = []
+
+    # Final result
+    overall_status: str = ""  # PASS / FAIL / PARTIAL
+    screenshots: list[str] = []
+    start_time: float = 0.0
+
+
+class FormTestFlow(Flow[FormTestState]):
+
+    def __init__(self, settings: Settings | None = None, **kwargs: Any):
+        super().__init__(**kwargs)
+        self._settings = settings or get_settings()
+        self._browser_manager: BrowserManager | None = None
+
+    @start()
+    def parse_test_case(self) -> str:
+        """Parse the test case file into unified structure."""
+        self.state.start_time = time.time()
+        logger.info(
+            f"Parsing test case from: {self.state.test_input_path}"
+        )
+
+        test_cases = parse_test_file(
+            self.state.test_input_path,
+            self.state.target_url,
+            self._settings,
+        )
+        if not test_cases:
+            raise ValueError("No test cases found in input file")
+
+        # Use the first test case
+        tc = test_cases[0]
+        self.state.test_case_data = tc.data
+        self.state.test_case_id = tc.test_id
+        self.state.target_url = tc.url or self.state.target_url
+        self.state.description = tc.description
+        self.state.expected_outcome = tc.expected_outcome
+
+        logger.info(
+            f"Test case '{tc.test_id}' loaded with "
+            f"{len(tc.data)} data fields"
+        )
+        return "parsed"
+
+    @listen(parse_test_case)
+    def open_browser_and_navigate(self) -> str:
+        """Start Playwright and navigate to target URL."""
+        if not self.state.target_url:
+            raise ValueError("No target URL specified")
+
+        self._browser_manager = BrowserManager(self._settings)
+        self._browser_manager.start()
+        self._browser_manager.navigate(self.state.target_url)
+        logger.info("Browser ready, starting page processing")
+        return "navigated"
+
+    @listen(open_browser_and_navigate)
+    def process_page(self) -> str:
+        """Trigger PageCrew to process the current page."""
+        if self.state.current_page_index >= self.state.max_pages:
+            logger.warning("Max pages reached, stopping")
+            self.state.overall_status = "PARTIAL"
+            return "crew_done"
+
+        logger.info(
+            f"Processing page {self.state.current_page_index + 1} "
+            f"(retry {self.state.retry_count})"
+        )
+
+        page = self._browser_manager.page
+        crew = build_page_crew(page, self._settings)
+
+        result = crew.kickoff(inputs={
+            "test_data": json.dumps(self.state.test_case_data),
+            "consumed_fields": json.dumps(self.state.consumed_fields),
+            "validation_errors": json.dumps(self.state.validation_errors),
+        })
+
+        self._update_state_from_crew_result(result)
+        return "crew_done"
+
+    def _update_state_from_crew_result(self, result: Any) -> None:
+        """Parse crew output and update flow state."""
+        raw = str(result)
+        logger.debug(f"Crew result (raw): {raw[:500]}")
+
+        # Try to parse the verification result from the last task output
+        try:
+            # The crew result might be JSON or text - try to extract JSON
+            parsed = self._extract_json(raw)
+
+            self.state.verification_passed = parsed.get("passed", False)
+            self.state.current_page_id = parsed.get(
+                "new_page_id", f"page_{self.state.current_page_index}"
+            )
+
+            errors = parsed.get("validation_errors", [])
+            self.state.validation_errors = [
+                e.get("message", str(e)) if isinstance(e, dict) else str(e)
+                for e in errors
+            ]
+
+            screenshot = parsed.get("screenshot_path", "")
+            if screenshot:
+                self.state.screenshots.append(screenshot)
+
+            # Track consumed fields
+            consumed = parsed.get("consumed_keys", [])
+            self.state.consumed_fields.extend(consumed)
+
+            is_final = parsed.get("is_final_page", False)
+            if is_final:
+                self.state.current_page_id = "completion"
+
+        except Exception as e:
+            logger.warning(f"Could not parse crew result as JSON: {e}")
+            # Heuristic: if no errors mentioned, assume passed
+            raw_lower = raw.lower()
+            if "error" in raw_lower or "fail" in raw_lower:
+                self.state.verification_passed = False
+                self.state.validation_errors = [
+                    "Could not parse verification result"
+                ]
+            else:
+                self.state.verification_passed = True
+
+        # Record page result
+        self.state.page_results.append({
+            "page_index": self.state.current_page_index,
+            "page_id": self.state.current_page_id,
+            "verification_passed": self.state.verification_passed,
+            "validation_errors": self.state.validation_errors,
+            "retry_count": self.state.retry_count,
+        })
+
+    @staticmethod
+    def _extract_json(text: str) -> dict:
+        """Try to extract a JSON object from text that may contain other content."""
+        # Try the whole string
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+        # Find the last JSON block (verification task is the last output)
+        depth = 0
+        start = -1
+        for i in range(len(text) - 1, -1, -1):
+            if text[i] == "}":
+                if depth == 0:
+                    end = i
+                depth += 1
+            elif text[i] == "{":
+                depth -= 1
+                if depth == 0:
+                    start = i
+                    break
+        if start >= 0:
+            return json.loads(text[start : end + 1])
+        raise ValueError("No JSON object found in text")
+
+    @router(process_page)
+    def decide_next_step(self) -> str:
+        """Decide: next_page / retry / complete."""
+        if self.state.verification_passed:
+            if self.state.current_page_id == "completion":
+                logger.info("Form completed successfully")
+                return "complete"
+            logger.info("Page passed, advancing to next page")
+            return "next_page"
+        elif self.state.retry_count < self.state.max_retries:
+            logger.info(
+                f"Verification failed, retrying "
+                f"({self.state.retry_count + 1}/{self.state.max_retries})"
+            )
+            return "retry"
+        else:
+            logger.warning("Max retries exceeded, completing with errors")
+            return "complete"
+
+    @listen("next_page")
+    def advance_to_next_page(self) -> str:
+        """Advance to the next page and re-enter process_page."""
+        self.state.current_page_index += 1
+        self.state.retry_count = 0
+        self.state.validation_errors = []
+        return self.process_page()
+
+    @listen("retry")
+    def retry_current_page(self) -> str:
+        """Retry the current page with error context."""
+        self.state.retry_count += 1
+        return self.process_page()
+
+    @listen("complete")
+    def generate_report(self) -> dict:
+        """Generate the final test report and clean up."""
+        duration = time.time() - self.state.start_time
+
+        # Determine overall status
+        if not self.state.page_results:
+            self.state.overall_status = "FAIL"
+        elif all(
+            p.get("verification_passed") for p in self.state.page_results
+        ):
+            self.state.overall_status = "PASS"
+        elif any(
+            p.get("verification_passed") for p in self.state.page_results
+        ):
+            self.state.overall_status = "PARTIAL"
+        else:
+            self.state.overall_status = "FAIL"
+
+        pages = []
+        for pr in self.state.page_results:
+            pages.append(PageResult(
+                page_index=pr.get("page_index", 0),
+                page_id=pr.get("page_id", "unknown"),
+                fields_filled=[],  # Detailed results from crew
+                verification_passed=pr.get("verification_passed", False),
+                validation_errors=pr.get("validation_errors", []),
+                retry_count=pr.get("retry_count", 0),
+            ))
+
+        report = TestReport(
+            test_case_id=self.state.test_case_id,
+            url=self.state.target_url,
+            overall_status=self.state.overall_status,
+            total_pages=self.state.current_page_index + 1,
+            pages_completed=sum(
+                1 for p in pages if p.verification_passed
+            ),
+            pages=pages,
+            screenshots=self.state.screenshots,
+            start_time=time.strftime(
+                "%Y-%m-%d %H:%M:%S",
+                time.localtime(self.state.start_time),
+            ),
+            end_time=time.strftime("%Y-%m-%d %H:%M:%S"),
+            duration_seconds=round(duration, 2),
+        )
+
+        # Save reports
+        report_dict = report.model_dump()
+        json_path = save_json_report(report_dict, self.state.test_case_id)
+        html_path = save_html_report(report_dict, self.state.test_case_id)
+
+        logger.info(
+            f"Test complete: {self.state.overall_status} | "
+            f"Pages: {report.pages_completed}/{report.total_pages} | "
+            f"Duration: {report.duration_seconds}s"
+        )
+        logger.info(f"Reports: {json_path}, {html_path}")
+
+        # Cleanup browser
+        if self._browser_manager:
+            self._browser_manager.close()
+
+        return report_dict

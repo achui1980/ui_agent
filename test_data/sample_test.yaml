@@ -1,0 +1,18 @@
+- test_id: TC003_senior_plan
+  description: Senior citizen applying for Medicare supplement
+  expected_outcome: success
+  data:
+    first_name: Robert
+    last_name: Johnson
+    email: robert.j@example.com
+    phone: "555-456-7890"
+    date_of_birth: "06/10/1955"
+    gender: Male
+    address: 789 Elm Drive
+    city: Miami
+    state: Florida
+    zip_code: "33101"
+    coverage_type: Individual
+    plan_type: Medicare Supplement
+    tobacco_use: "No"
+    agree_terms: "true"

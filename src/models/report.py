@@ -1,0 +1,16 @@
+from pydantic import BaseModel
+
+from .page_result import PageResult
+
+
+class TestReport(BaseModel):
+    test_case_id: str
+    url: str
+    overall_status: str  # PASS / FAIL / PARTIAL
+    total_pages: int
+    pages_completed: int
+    pages: list[PageResult]
+    screenshots: list[str]
+    start_time: str
+    end_time: str
+    duration_seconds: float
