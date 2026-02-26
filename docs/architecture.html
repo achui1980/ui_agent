@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UI Agent - Architecture Diagrams</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --surface: #161b22; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e; --accent: #58a6ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
+  .header { padding: 20px 32px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 20px; font-weight: 600; }
+  .header span { color: var(--muted); font-size: 14px; }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 32px; background: var(--surface); }
+  .tab { padding: 12px 20px; cursor: pointer; color: var(--muted); font-size: 14px; font-weight: 500;
+         border-bottom: 2px solid transparent; transition: all .15s; user-select: none; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .content { padding: 24px 32px; }
+  .diagram { display: none; }
+  .diagram.active { display: block; }
+  .diagram h2 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .diagram p.desc { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .mermaid-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+                  padding: 24px; overflow: auto; max-height: 80vh; }
+  .mermaid-wrap svg { max-width: 100%; height: auto; }
+  .legend { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: var(--muted); }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>UI Agent Architecture</h1>
+  <span>AI-Powered Web Form Testing System - CrewAI + Playwright</span>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-target="overview">System Overview</div>
+  <div class="tab" data-target="dataflow">Execution Flow</div>
+  <div class="tab" data-target="modules">Module Dependencies</div>
+  <div class="tab" data-target="tools">Tool Layer</div>
+</div>
+
+<div class="content">
+
+  <!-- 1. System Overview -->
+  <div id="overview" class="diagram active">
+    <h2>System Overview</h2>
+    <p class="desc">Four-layer architecture: CLI - Orchestration - Multi-Agent - Tools and Browser</p>
+    <div class="mermaid-wrap"><div class="mermaid-chart" id="chart-overview"></div></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>CLI / Input</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Orchestration</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>Agents</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Tools</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Browser</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#38bdf8"></div>Output</div>
+    </div>
+  </div>
+
+  <!-- 2. Execution Flow -->
+  <div id="dataflow" class="diagram">
+    <h2>Execution Flow</h2>
+    <p class="desc">Complete lifecycle: CLI input - Parse - Browser - Agent loop per page - Report generation</p>
+    <div class="mermaid-wrap"><div class="mermaid-chart" id="chart-dataflow"></div></div>
+  </div>
+
+  <!-- 3. Module Dependencies -->
+  <div id="modules" class="diagram">
+    <h2>Module Dependencies</h2>
+    <p class="desc">Import relationships between src/ packages. Arrows point from importer to imported.</p>
+    <div class="mermaid-wrap"><div class="mermaid-chart" id="chart-modules"></div></div>
+  </div>
+
+  <!-- 4. Tool Layer -->
+  <div id="tools" class="diagram">
+    <h2>Tool Layer Detail</h2>
+    <p class="desc">Each tool Playwright operations, self-healing strategies, and agent assignments</p>
+    <div class="mermaid-wrap"><div class="mermaid-chart" id="chart-tools"></div></div>
+  </div>
+
+</div>
+
+<script>
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'dark',
+  themeVariables: {
+    darkMode: true,
+    background: '#161b22',
+    primaryColor: '#1f2937',
+    primaryTextColor: '#e6edf3',
+    primaryBorderColor: '#30363d',
+    lineColor: '#58a6ff',
+    secondaryColor: '#1c2333',
+    tertiaryColor: '#0d1117',
+    fontFamily: '-apple-system, Segoe UI, Helvetica, Arial, sans-serif',
+    fontSize: '13px',
+  },
+  flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis', padding: 16 },
+});
+
+const charts = {
+  'chart-overview': `graph TB
+  subgraph EXT["External Services"]
+    LLM["OpenAI LLM API"]
+    VLM_API["OpenAI VLM API"]
+    WEB["Target Website"]
+  end
+  subgraph INPUT["Input"]
+    ENV[".env Config"]
+    TD["Test Data Files"]
+  end
+  subgraph CLI_LAYER["CLI Layer"]
+    RUN["ui-agent run"]
+    VAL["ui-agent validate"]
+    ANA["ui-agent analyze"]
+  end
+  subgraph ORCH["Orchestration Layer"]
+    FLOW["FormTestFlow"]
+    CREW["PageCrew"]
+    PARSE["Parser Factory"]
+  end
+  subgraph AGENTS["Agent Layer"]
+    PA["Page Analyzer"]
+    FM["Field Mapper"]
+    FF["Form Filler"]
+    RV["Result Verifier"]
+  end
+  subgraph TOOLS["Tool Layer"]
+    T_DOM["DOM Extractor"]
+    T_SS["Screenshot"]
+    T_VLM["Screenshot Analysis"]
+    T_FILL["Fill Input"]
+    T_SEL["Select Option"]
+    T_CHK["Checkbox"]
+    T_CLK["Click Button"]
+    T_DATE["Date Picker"]
+    T_UPL["Upload File"]
+    T_VAL["Validation Errors"]
+  end
+  subgraph BROWSER["Browser Layer"]
+    BM["BrowserManager"]
+    PAGE["Playwright Page"]
+  end
+  subgraph OUTPUT["Output"]
+    RPT_J["JSON Report"]
+    RPT_H["HTML Report"]
+    SHOTS["Screenshots"]
+  end
+  ENV --> CLI_LAYER
+  TD --> RUN
+  RUN --> FLOW
+  VAL --> PARSE
+  ANA --> BM
+  FLOW --> PARSE
+  FLOW --> BM
+  FLOW --> CREW
+  CREW --> PA
+  CREW --> FM
+  CREW --> FF
+  CREW --> RV
+  PA --> T_DOM
+  PA --> T_SS
+  PA --> T_VLM
+  FF --> T_FILL
+  FF --> T_SEL
+  FF --> T_CHK
+  FF --> T_CLK
+  FF --> T_DATE
+  FF --> T_UPL
+  RV --> T_SS
+  RV --> T_VAL
+  T_DOM --> PAGE
+  T_SS --> PAGE
+  T_FILL --> PAGE
+  T_SEL --> PAGE
+  T_CHK --> PAGE
+  T_CLK --> PAGE
+  T_DATE --> PAGE
+  T_UPL --> PAGE
+  T_VAL --> PAGE
+  T_VLM --> PAGE
+  T_VLM --> VLM_API
+  BM --> PAGE
+  PAGE --> WEB
+  PA --> LLM
+  FM --> LLM
+  FF --> LLM
+  RV --> LLM
+  FLOW --> RPT_J
+  FLOW --> RPT_H
+  T_SS --> SHOTS
+  classDef ext fill:#1f2937,stroke:#4b5563,color:#e5e7eb
+  classDef input fill:#1c2333,stroke:#3b82f6,color:#93c5fd
+  classDef cli fill:#172554,stroke:#3b82f6,color:#93c5fd
+  classDef orch fill:#14532d,stroke:#22c55e,color:#bbf7d0
+  classDef agent fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+  classDef tool fill:#78350f,stroke:#f59e0b,color:#fef3c7
+  classDef browser fill:#7f1d1d,stroke:#ef4444,color:#fecaca
+  classDef output fill:#1e3a5f,stroke:#38bdf8,color:#bae6fd
+  class LLM,VLM_API,WEB ext
+  class ENV,TD input
+  class RUN,VAL,ANA cli
+  class FLOW,CREW,PARSE orch
+  class PA,FM,FF,RV agent
+  class T_DOM,T_SS,T_VLM,T_FILL,T_SEL,T_CHK,T_CLK,T_DATE,T_UPL,T_VAL tool
+  class BM,PAGE browser
+  class RPT_J,RPT_H,SHOTS output`,
+
+  'chart-dataflow': `flowchart TD
+  START(["ui-agent run test.json --url URL"])
+  START --> PARSE_TC
+  PARSE_TC["1 parse_test_case - Load test data"]
+  PARSE_TC --> OPEN_BR["2 open_browser - Start Chromium"]
+  OPEN_BR --> PROC_PAGE
+  PROC_PAGE["3 process_page - Build 4-agent Crew"]
+  PROC_PAGE --> TASK1
+  subgraph CREW_EXEC["Crew Sequential Execution"]
+    TASK1["Task 1: Page Analyzer\nDOM Extractor + VLM Analysis + Screenshot"]
+    TASK1 -->|fields JSON| TASK2["Task 2: Field Mapper\nSemantic match test data to fields"]
+    TASK2 -->|mappings JSON| TASK3["Task 3: Form Filler\nFill inputs + select + check + click submit"]
+    TASK3 -->|fill results| TASK4["Task 4: Result Verifier\nScreenshot + scan errors + check transition"]
+  end
+  TASK4 --> DECIDE
+  DECIDE{"4 decide_next_step"}
+  DECIDE -->|passed + not final| NEXT["5a advance_to_next_page\npage_index++ reset retries"]
+  DECIDE -->|failed + retries left| RETRY["5b retry_current_page\nretry_count++ keep errors"]
+  DECIDE -->|final page or max retries| COMPLETE["5c generate_report"]
+  NEXT --> PROC_PAGE
+  RETRY --> PROC_PAGE
+  COMPLETE --> JSON_RPT["JSON Report"]
+  COMPLETE --> HTML_RPT["HTML Report"]
+  COMPLETE --> CLOSE_BR["Close Browser"]
+  JSON_RPT --> DONE(["Test Complete: PASS / PARTIAL / FAIL"])
+  HTML_RPT --> DONE
+  CLOSE_BR --> DONE
+  classDef init fill:#1c2333,stroke:#3b82f6,color:#93c5fd
+  classDef crew fill:#14532d,stroke:#22c55e,color:#bbf7d0
+  classDef decision fill:#78350f,stroke:#f59e0b,color:#fef3c7
+  classDef report fill:#1e3a5f,stroke:#38bdf8,color:#bae6fd
+  classDef endpoint fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+  class PARSE_TC,OPEN_BR init
+  class TASK1,TASK2,TASK3,TASK4 crew
+  class DECIDE,NEXT,RETRY decision
+  class COMPLETE,JSON_RPT,HTML_RPT,CLOSE_BR report
+  class START,DONE endpoint`,
+
+  'chart-modules': `graph LR
+  CONFIG["config.py\nSettings"]
+  MODELS["models/\nTestCase PageResult\nFieldActionResult TestReport"]
+  UTILS["utils/\nsetup_logging"]
+  T_DOM["dom_extractor_tool"]
+  T_SS["screenshot_tool"]
+  T_VLM["screenshot_analysis_tool"]
+  T_FILL["fill_input_tool"]
+  T_SEL["select_option_tool"]
+  T_CHK["checkbox_tool"]
+  T_CLK["click_button_tool"]
+  T_DATE["date_picker_tool"]
+  T_UPL["upload_file_tool"]
+  T_VAL["validation_error_tool"]
+  A_PA["page_analyzer.py"]
+  A_FM["field_mapper.py"]
+  A_FF["form_filler.py"]
+  A_RV["result_verifier.py"]
+  PF["parser_factory.py"]
+  P_JSON["json_parser"]
+  P_YAML["yaml_parser"]
+  P_CSV["csv_parser"]
+  P_EXCEL["excel_parser"]
+  P_NL["nl_parser"]
+  R_JSON["json_report.py"]
+  R_HTML["html_report.py"]
+  BM["browser_manager.py"]
+  PAGE_CREW["page_crew.py"]
+  FORM_FLOW["form_test_flow.py"]
+  MAIN["main.py"]
+  UTILS --> CONFIG
+  BM --> CONFIG
+  PF --> P_JSON
+  PF --> P_YAML
+  PF --> P_CSV
+  PF --> P_EXCEL
+  PF --> P_NL
+  PF --> MODELS
+  PF --> CONFIG
+  P_JSON --> MODELS
+  P_YAML --> MODELS
+  P_CSV --> MODELS
+  P_EXCEL --> MODELS
+  P_NL --> MODELS
+  A_PA --> T_DOM
+  A_PA --> T_SS
+  A_PA --> T_VLM
+  A_PA --> CONFIG
+  A_FF --> T_FILL
+  A_FF --> T_SEL
+  A_FF --> T_CHK
+  A_FF --> T_CLK
+  A_FF --> T_DATE
+  A_FF --> T_UPL
+  A_RV --> T_SS
+  A_RV --> T_VAL
+  PAGE_CREW --> A_PA
+  PAGE_CREW --> A_FM
+  PAGE_CREW --> A_FF
+  PAGE_CREW --> A_RV
+  PAGE_CREW --> CONFIG
+  FORM_FLOW --> PAGE_CREW
+  FORM_FLOW --> BM
+  FORM_FLOW --> PF
+  FORM_FLOW --> MODELS
+  FORM_FLOW --> CONFIG
+  FORM_FLOW --> R_JSON
+  FORM_FLOW --> R_HTML
+  MAIN --> CONFIG
+  MAIN --> UTILS
+  MAIN --> FORM_FLOW
+  classDef core fill:#1c2333,stroke:#3b82f6,color:#93c5fd
+  classDef tool fill:#78350f,stroke:#f59e0b,color:#fef3c7
+  classDef agent fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+  classDef parser fill:#14532d,stroke:#22c55e,color:#bbf7d0
+  classDef report fill:#1e3a5f,stroke:#38bdf8,color:#bae6fd
+  classDef browser fill:#7f1d1d,stroke:#ef4444,color:#fecaca
+  classDef flow fill:#064e3b,stroke:#10b981,color:#a7f3d0
+  classDef main fill:#312e81,stroke:#818cf8,color:#c7d2fe
+  class CONFIG,MODELS,UTILS core
+  class T_DOM,T_SS,T_VLM,T_FILL,T_SEL,T_CHK,T_CLK,T_DATE,T_UPL,T_VAL tool
+  class A_PA,A_FM,A_FF,A_RV agent
+  class PF,P_JSON,P_YAML,P_CSV,P_EXCEL,P_NL parser
+  class R_JSON,R_HTML report
+  class BM browser
+  class PAGE_CREW,FORM_FLOW flow
+  class MAIN main`,
+
+  'chart-tools': `graph TB
+  subgraph AGENTS["Agent to Tool Assignment"]
+    PA_A["Page Analyzer"]
+    FM_A["Field Mapper\nno tools - pure LLM"]
+    FF_A["Form Filler"]
+    RV_A["Result Verifier"]
+  end
+  subgraph ANALYSIS["Analysis Tools"]
+    DOM["DOM Extractor\n---\npage.evaluate JS\nextract fields selectors\ntypes labels buttons errors"]
+    SS["Screenshot\n---\npage.screenshot\nsave full-page PNG"]
+    VLM_T["Screenshot Analysis\n---\n1 page.screenshot\n2 base64 encode\n3 OpenAI VLM API call\nidentify react-select\ndatepicker autocomplete"]
+    VALE["Validation Errors\n---\npage.evaluate JS\nscan .error .invalid\naria-invalid elements"]
+  end
+  subgraph INTERACT["Form Interaction Tools"]
+    FILL["Fill Input\n---\nPrimary: locator.fill + Escape\nHeal: click clear press_sequentially\n+ Escape"]
+    SEL["Select Option\n---\nS1 Native: select_option\nS2 React: click type click-option\nS3 Generic: click trigger find match"]
+    CHK["Checkbox Toggle\n---\nPrimary: Escape then check/uncheck\nHeal1: click label for=id\nHeal2: force-click element"]
+    CLK["Click Button\n---\nPrimary: locator.click\nwait for navigation\nHeal: click force=true"]
+    DTP["Date Picker\n---\nS1 triple-click type Escape\nS2 locator.fill\nS3 JS value injection\ninput change blur events"]
+    UPL["Upload File\n---\nlocator.set_input_files\nattach file path"]
+  end
+  subgraph STATUS["Return Status Pattern"]
+    S_OK["SUCCESS: primary worked"]
+    S_HL["HEALED: fallback worked"]
+    S_FL["FAILED: all strategies failed"]
+  end
+  PA_A --> DOM
+  PA_A --> SS
+  PA_A --> VLM_T
+  FF_A --> FILL
+  FF_A --> SEL
+  FF_A --> CHK
+  FF_A --> CLK
+  FF_A --> DTP
+  FF_A --> UPL
+  RV_A --> SS
+  RV_A --> VALE
+  DOM --> S_OK
+  SS --> S_OK
+  VLM_T --> S_OK
+  VALE --> S_OK
+  FILL --> S_OK
+  SEL --> S_OK
+  CHK --> S_OK
+  CLK --> S_OK
+  DTP --> S_OK
+  UPL --> S_OK
+  classDef agent fill:#3b0764,stroke:#a855f7,color:#e9d5ff
+  classDef analysis fill:#1c2333,stroke:#3b82f6,color:#93c5fd
+  classDef interact fill:#78350f,stroke:#f59e0b,color:#fef3c7
+  classDef status fill:#14532d,stroke:#22c55e,color:#bbf7d0
+  class PA_A,FM_A,FF_A,RV_A agent
+  class DOM,SS,VLM_T,VALE analysis
+  class FILL,SEL,CHK,CLK,DTP,UPL interact
+  class S_OK,S_HL,S_FL status`
+};
+
+// Render a chart into its container
+async function renderChart(id) {
+  const el = document.getElementById(id);
+  if (!el || el.dataset.rendered) return;
+  const def = charts[id];
+  if (!def) return;
+  try {
+    const { svg } = await mermaid.render('mmd-' + id, def);
+    el.innerHTML = svg;
+    el.dataset.rendered = 'true';
+  } catch (e) {
+    el.innerHTML = '<p style="color:#f85149;padding:12px;">Mermaid render error: ' + e.message + '</p>';
+  }
+}
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.diagram').forEach(d => d.classList.remove('active'));
+    tab.classList.add('active');
+    const target = document.getElementById(tab.dataset.target);
+    target.classList.add('active');
+    // Render chart if not yet rendered
+    const chartEl = target.querySelector('.mermaid-chart');
+    if (chartEl) renderChart(chartEl.id);
+  });
+});
+
+// Render the first visible chart on load
+renderChart('chart-overview');
+</script>
+
+</body>
+</html>

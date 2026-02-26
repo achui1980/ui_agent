@@ -14,7 +14,10 @@ from .nl_parser import parse_natural_language
 
 
 def parse_test_file(
-    path: str, url: str, settings: Settings | None = None
+    path: str,
+    url: str,
+    settings: Settings | None = None,
+    page_context: dict | None = None,
 ) -> list[TestCase]:
     """Dispatch to the appropriate parser based on file extension."""
     ext = os.path.splitext(path)[1].lower()
@@ -30,9 +33,13 @@ def parse_test_file(
         return parse_yaml(path, url)
     elif ext == ".txt":
         if settings is None:
+            raise ValueError("Settings required for natural language parsing")
+        if page_context is None:
             raise ValueError(
-                "Settings required for natural language parsing"
+                "Natural language parsing requires page context. "
+                "Provide a URL so the system can analyze the target "
+                "form first."
             )
-        return parse_natural_language(path, url, settings)
+        return parse_natural_language(path, url, settings, page_context)
     else:
         raise ValueError(f"Unsupported test file format: {ext}")

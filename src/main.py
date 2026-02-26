@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 
 import click
@@ -41,14 +42,47 @@ def run(test_file: str, url: str, max_pages: int, max_retries: int) -> None:
 
 @cli.command()
 @click.argument("test_file")
-@click.option("--url", "-u", default="", help="Default URL if not in file")
+@click.option("--url", "-u", default="", help="Target URL (required for .txt files)")
 def validate(test_file: str, url: str) -> None:
     """Parse and validate a test case file without running."""
     from src.parsers.parser_factory import parse_test_file
 
     settings = get_settings()
+    ext = os.path.splitext(test_file)[1].lower()
+
+    page_context = None
+    bm = None
+
+    if ext == ".txt":
+        if not url:
+            click.echo(
+                "Error: --url is required for natural language (.txt) files",
+                err=True,
+            )
+            sys.exit(1)
+
+        # Start browser and extract page context for NL parsing
+        from src.browser.browser_manager import BrowserManager
+        from src.tools.dom_extractor_tool import DOMExtractorTool
+
+        click.echo(f"Analyzing page: {url}")
+        bm = BrowserManager(settings)
+        page = bm.start()
+        bm.navigate(url)
+
+        extractor = DOMExtractorTool(page=page)
+        result = extractor._run()
+        page_context = json.loads(result)
+        fields = page_context.get("fields", [])
+        click.echo(f"Page analyzed: {len(fields)} fields found\n")
+
     try:
-        test_cases = parse_test_file(test_file, url, settings)
+        test_cases = parse_test_file(
+            test_file,
+            url,
+            settings,
+            page_context,
+        )
         click.echo(f"Parsed {len(test_cases)} test case(s):\n")
         for tc in test_cases:
             click.echo(f"  ID: {tc.test_id}")
@@ -57,11 +91,14 @@ def validate(test_file: str, url: str) -> None:
             click.echo(f"  Expected: {tc.expected_outcome}")
             if tc.description:
                 click.echo(f"  Description: {tc.description}")
-            click.echo(f"  Data: {json.dumps(tc.data, indent=4)}")
+            click.echo(f"  Data: {json.dumps(tc.data, indent=4, ensure_ascii=False)}")
             click.echo()
     except Exception as e:
         click.echo(f"Validation failed: {e}", err=True)
         sys.exit(1)
+    finally:
+        if bm:
+            bm.close()
 
 
 @cli.command()

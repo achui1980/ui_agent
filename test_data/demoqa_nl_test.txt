@@ -1,0 +1,6 @@
+请帮我填写学生注册表单。
+用户名叫 John Smith，邮箱 john.smith@example.com。
+性别选男，手机号 1234567890，出生日期是1990年1月15日。
+科目选数学，爱好是运动。
+当前地址在 123 Main Street, Springfield。
+州选 NCR，城市选 Delhi。

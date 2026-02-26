@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from typing import Any
 
@@ -19,6 +20,7 @@ from src.reporting.html_report import save_html_report
 
 class FormTestState(BaseModel):
     """Flow global state."""
+
     # Input
     test_input_path: str = ""
     target_url: str = ""
@@ -28,6 +30,9 @@ class FormTestState(BaseModel):
     test_case_id: str = ""
     description: str = ""
     expected_outcome: str = "success"
+
+    # Page context (for NL parsing)
+    page_context: dict = {}
 
     # Page loop state
     current_page_index: int = 0
@@ -49,7 +54,6 @@ class FormTestState(BaseModel):
 
 
 class FormTestFlow(Flow[FormTestState]):
-
     def __init__(self, settings: Settings | None = None, **kwargs: Any):
         super().__init__(**kwargs)
         self._settings = settings or get_settings()
@@ -57,11 +61,15 @@ class FormTestFlow(Flow[FormTestState]):
 
     @start()
     def parse_test_case(self) -> str:
-        """Parse the test case file into unified structure."""
+        """Detect input type. NL files need page analysis first."""
         self.state.start_time = time.time()
-        logger.info(
-            f"Parsing test case from: {self.state.test_input_path}"
-        )
+        ext = os.path.splitext(self.state.test_input_path)[1].lower()
+
+        if ext == ".txt":
+            logger.info("Natural language input detected, need page analysis first")
+            return "needs_page_analysis"
+
+        logger.info(f"Parsing test case from: {self.state.test_input_path}")
 
         test_cases = parse_test_file(
             self.state.test_input_path,
@@ -71,25 +79,121 @@ class FormTestFlow(Flow[FormTestState]):
         if not test_cases:
             raise ValueError("No test cases found in input file")
 
-        # Use the first test case
         tc = test_cases[0]
+        self._load_test_case(tc)
+
+        logger.info(f"Test case '{tc.test_id}' loaded with {len(tc.data)} data fields")
+        return "parsed"
+
+    @router(parse_test_case)
+    def route_after_parse(self) -> str:
+        """Route based on whether NL pre-analysis is needed."""
+        if self.state.test_case_id:
+            # Already parsed (non-NL input)
+            return "open_browser"
+        else:
+            # NL input — needs page analysis first
+            return "pre_analyze"
+
+    @listen("pre_analyze")
+    def pre_analyze_page(self) -> str:
+        """For NL input: open browser, extract DOM, then parse NL with page context."""
+        if not self.state.target_url:
+            raise ValueError("URL is required for natural language (.txt) test files")
+
+        logger.info("Pre-analyzing page for NL context...")
+
+        # Start browser and navigate
+        self._browser_manager = BrowserManager(self._settings)
+        self._browser_manager.start()
+        self._browser_manager.navigate(self.state.target_url)
+
+        # Extract DOM field info
+        from src.tools.dom_extractor_tool import DOMExtractorTool
+
+        extractor = DOMExtractorTool(page=self._browser_manager.page)
+        result = extractor._run()
+        page_context = json.loads(result)
+        self.state.page_context = page_context
+
+        logger.info(
+            f"Page context extracted: {len(page_context.get('fields', []))} fields"
+        )
+
+        # Parse NL with context
+        test_cases = parse_test_file(
+            self.state.test_input_path,
+            self.state.target_url,
+            self._settings,
+            page_context=page_context,
+        )
+        if not test_cases:
+            raise ValueError("No test cases found in NL input")
+
+        tc = test_cases[0]
+        self._load_test_case(tc)
+
+        logger.info(
+            f"NL test case '{tc.test_id}' parsed with "
+            f"{len(tc.data)} fields (context-aware)"
+        )
+
+        # Chain directly into the page processing loop (browser already started above).
+        # Because we're calling process_page directly (not via Flow event system),
+        # @router(process_page) won't fire automatically, so we drive the loop here.
+        return self._run_page_loop()
+
+    def _run_page_loop(self) -> dict:
+        """Drive the page-processing loop manually.
+
+        Used when the NL path calls process_page directly (outside the Flow
+        event system), so @router(process_page) / @listen decorators won't
+        trigger automatically.
+        """
+        while True:
+            result = self.process_page()  # noqa: arg-type
+
+            # Decide next step (mirrors decide_next_step logic)
+            if self.state.verification_passed:
+                if self.state.current_page_id == "completion":
+                    logger.info("Form completed successfully")
+                    break
+                logger.info("Page passed, advancing to next page")
+                self.state.current_page_index += 1
+                self.state.retry_count = 0
+                self.state.validation_errors = []
+                continue
+            elif self.state.retry_count < self.state.max_retries:
+                logger.info(
+                    f"Verification failed, retrying "
+                    f"({self.state.retry_count + 1}/{self.state.max_retries})"
+                )
+                self.state.retry_count += 1
+                continue
+            else:
+                logger.warning("Max retries exceeded, completing with errors")
+                break
+
+        return self.generate_report()
+
+    def _load_test_case(self, tc: TestCase) -> None:
+        """Load a parsed TestCase into flow state."""
         self.state.test_case_data = tc.data
         self.state.test_case_id = tc.test_id
         self.state.target_url = tc.url or self.state.target_url
         self.state.description = tc.description
         self.state.expected_outcome = tc.expected_outcome
 
-        logger.info(
-            f"Test case '{tc.test_id}' loaded with "
-            f"{len(tc.data)} data fields"
-        )
-        return "parsed"
-
-    @listen(parse_test_case)
+    @listen("open_browser")
     def open_browser_and_navigate(self) -> str:
         """Start Playwright and navigate to target URL."""
         if not self.state.target_url:
             raise ValueError("No target URL specified")
+
+        # If browser already started (from NL pre-analysis), skip
+        if self._browser_manager is not None:
+            logger.info("Browser already started (from NL pre-analysis), skipping")
+            return "navigated"
 
         self._browser_manager = BrowserManager(self._settings)
         self._browser_manager.start()
@@ -113,11 +217,13 @@ class FormTestFlow(Flow[FormTestState]):
         page = self._browser_manager.page
         crew = build_page_crew(page, self._settings)
 
-        result = crew.kickoff(inputs={
-            "test_data": json.dumps(self.state.test_case_data),
-            "consumed_fields": json.dumps(self.state.consumed_fields),
-            "validation_errors": json.dumps(self.state.validation_errors),
-        })
+        result = crew.kickoff(
+            inputs={
+                "test_data": json.dumps(self.state.test_case_data),
+                "consumed_fields": json.dumps(self.state.consumed_fields),
+                "validation_errors": json.dumps(self.state.validation_errors),
+            }
+        )
 
         self._update_state_from_crew_result(result)
         return "crew_done"
@@ -161,20 +267,20 @@ class FormTestFlow(Flow[FormTestState]):
             raw_lower = raw.lower()
             if "error" in raw_lower or "fail" in raw_lower:
                 self.state.verification_passed = False
-                self.state.validation_errors = [
-                    "Could not parse verification result"
-                ]
+                self.state.validation_errors = ["Could not parse verification result"]
             else:
                 self.state.verification_passed = True
 
         # Record page result
-        self.state.page_results.append({
-            "page_index": self.state.current_page_index,
-            "page_id": self.state.current_page_id,
-            "verification_passed": self.state.verification_passed,
-            "validation_errors": self.state.validation_errors,
-            "retry_count": self.state.retry_count,
-        })
+        self.state.page_results.append(
+            {
+                "page_index": self.state.current_page_index,
+                "page_id": self.state.current_page_id,
+                "verification_passed": self.state.verification_passed,
+                "validation_errors": self.state.validation_errors,
+                "retry_count": self.state.retry_count,
+            }
+        )
 
     @staticmethod
     def _extract_json(text: str) -> dict:
@@ -242,36 +348,32 @@ class FormTestFlow(Flow[FormTestState]):
         # Determine overall status
         if not self.state.page_results:
             self.state.overall_status = "FAIL"
-        elif all(
-            p.get("verification_passed") for p in self.state.page_results
-        ):
+        elif all(p.get("verification_passed") for p in self.state.page_results):
             self.state.overall_status = "PASS"
-        elif any(
-            p.get("verification_passed") for p in self.state.page_results
-        ):
+        elif any(p.get("verification_passed") for p in self.state.page_results):
             self.state.overall_status = "PARTIAL"
         else:
             self.state.overall_status = "FAIL"
 
         pages = []
         for pr in self.state.page_results:
-            pages.append(PageResult(
-                page_index=pr.get("page_index", 0),
-                page_id=pr.get("page_id", "unknown"),
-                fields_filled=[],  # Detailed results from crew
-                verification_passed=pr.get("verification_passed", False),
-                validation_errors=pr.get("validation_errors", []),
-                retry_count=pr.get("retry_count", 0),
-            ))
+            pages.append(
+                PageResult(
+                    page_index=pr.get("page_index", 0),
+                    page_id=pr.get("page_id", "unknown"),
+                    fields_filled=[],  # Detailed results from crew
+                    verification_passed=pr.get("verification_passed", False),
+                    validation_errors=pr.get("validation_errors", []),
+                    retry_count=pr.get("retry_count", 0),
+                )
+            )
 
         report = TestReport(
             test_case_id=self.state.test_case_id,
             url=self.state.target_url,
             overall_status=self.state.overall_status,
             total_pages=self.state.current_page_index + 1,
-            pages_completed=sum(
-                1 for p in pages if p.verification_passed
-            ),
+            pages_completed=sum(1 for p in pages if p.verification_passed),
             pages=pages,
             screenshots=self.state.screenshots,
             start_time=time.strftime(
