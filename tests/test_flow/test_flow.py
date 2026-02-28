@@ -663,3 +663,28 @@ class TestGenerateReport:
             result = flow.generate_report()
 
         assert result["overall_status"] == "FAIL"
+
+
+# ---------------------------------------------------------------------------
+# Multiple test case execution
+# ---------------------------------------------------------------------------
+
+
+class TestMultipleTestCases:
+    def test_parse_loads_all_cases(self, tmp_path):
+        """Parser should return all test cases from a multi-case file."""
+        import json
+
+        data = [
+            {"test_id": "TC1", "data": {"name": "Alice"}},
+            {"test_id": "TC2", "data": {"name": "Bob"}},
+        ]
+        path = tmp_path / "multi.json"
+        path.write_text(json.dumps(data))
+
+        from src.parsers.parser_factory import parse_test_file
+
+        cases = parse_test_file(str(path), "http://example.com")
+        assert len(cases) == 2
+        assert cases[0].test_id == "TC1"
+        assert cases[1].test_id == "TC2"

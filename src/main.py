@@ -27,17 +27,53 @@ def cli() -> None:
 def run(test_file: str, url: str, max_pages: int, max_retries: int) -> None:
     """Run a full form test using the test case file."""
     from src.flow.form_test_flow import FormTestFlow
+    from src.parsers.parser_factory import parse_test_file
 
     settings = get_settings()
-    flow = FormTestFlow(settings=settings)
-    flow.state.test_input_path = test_file
-    flow.state.target_url = url
-    flow.state.max_pages = max_pages
-    flow.state.max_retries = max_retries
+    ext = os.path.splitext(test_file)[1].lower()
 
-    logger.info(f"Starting test run: {test_file} -> {url}")
-    result = flow.kickoff()
-    logger.info(f"Test run complete. Status: {result}")
+    if ext == ".txt":
+        # NL files are handled inside the flow (need browser for page context)
+        logger.info(f"Starting NL test run: {test_file} -> {url}")
+        flow = FormTestFlow(settings=settings)
+        flow.state.test_input_path = test_file
+        flow.state.target_url = url
+        flow.state.max_pages = max_pages
+        flow.state.max_retries = max_retries
+        result = flow.kickoff()
+        logger.info(f"Test run complete. Status: {result}")
+        return
+
+    # Parse all test cases upfront
+    test_cases = parse_test_file(test_file, url, settings)
+    if not test_cases:
+        logger.error("No test cases found in input file")
+        sys.exit(1)
+
+    logger.info(
+        f"Starting test run: {test_file} -> {url} ({len(test_cases)} test case(s))"
+    )
+
+    all_results = []
+    for i, tc in enumerate(test_cases):
+        logger.info(f"--- Running case {i + 1}/{len(test_cases)}: {tc.test_id} ---")
+        flow = FormTestFlow(settings=settings)
+        flow.state.test_input_path = test_file
+        flow.state.target_url = url
+        flow.state.max_pages = max_pages
+        flow.state.max_retries = max_retries
+        flow._load_test_case(tc)
+
+        result = flow.kickoff()
+        all_results.append(result)
+
+    # Summary
+    logger.info(f"All {len(all_results)} test case(s) complete:")
+    for r in all_results:
+        if isinstance(r, dict):
+            logger.info(
+                f"  {r.get('test_case_id', '?')}: {r.get('overall_status', '?')}"
+            )
 
 
 @cli.command()

@@ -68,6 +68,14 @@ class FormTestFlow(Flow[FormTestState]):
     def parse_test_case(self) -> str:
         """Detect input type. NL files need page analysis first."""
         self.state.start_time = time.time()
+
+        # If test case data was pre-loaded (multi-case execution), skip parsing
+        if self.state.test_case_id:
+            logger.info(
+                f"Test case '{self.state.test_case_id}' pre-loaded, skipping parse"
+            )
+            return "parsed"
+
         ext = os.path.splitext(self.state.test_input_path)[1].lower()
 
         if ext == ".txt":
