@@ -1237,3 +1237,194 @@ class TestPageIndexIncrement:
         assert (
             result["total_pages"] == 3
         )  # len(page_results), not current_page_index + 1
+
+
+# ---------------------------------------------------------------------------
+# FR-08: Dynamic generation mode tests
+# ---------------------------------------------------------------------------
+
+
+class TestDynamicGenerationState:
+    """Test FormTestState fields for dynamic generation mode."""
+
+    def test_default_generation_mode_is_static(self):
+        state = FormTestState()
+        assert state.generation_mode == "static"
+        assert state.generation_persona == {}
+
+    def test_dynamic_mode_state(self):
+        state = FormTestState(
+            generation_mode="dynamic",
+            generation_persona={"first_name": "John"},
+        )
+        assert state.generation_mode == "dynamic"
+        assert state.generation_persona["first_name"] == "John"
+
+    def test_generation_mode_serialization(self):
+        state = FormTestState(generation_mode="dynamic")
+        d = state.model_dump()
+        assert d["generation_mode"] == "dynamic"
+        assert d["generation_persona"] == {}
+
+
+class TestDynamicGenerationFlow:
+    """Test the dynamic generation flow behavior."""
+
+    def test_parse_test_case_dynamic_mode_skips_parsing(self):
+        """Dynamic mode should skip test data parsing and set test_case_id."""
+        flow = _make_flow(
+            target_url="http://example.com",
+            generation_mode="dynamic",
+        )
+        result = flow.parse_test_case()
+
+        assert result == "parsed"
+        assert flow.state.test_case_id.startswith("GEN_")
+
+    def test_parse_test_case_dynamic_mode_preserves_existing_id(self):
+        """Dynamic mode should keep existing test_case_id if set."""
+        flow = _make_flow(
+            target_url="http://example.com",
+            generation_mode="dynamic",
+            test_case_id="CUSTOM_ID",
+        )
+        result = flow.parse_test_case()
+
+        assert result == "parsed"
+        assert flow.state.test_case_id == "CUSTOM_ID"
+
+    def test_persona_extraction_from_crew_result(self):
+        """_extract_persona_from_crew should merge persona into state."""
+        flow = _make_flow(generation_mode="dynamic")
+        crew_output = json.dumps(
+            {
+                "generated_data": {"first_name": "Jane", "dob": "01/15/1960"},
+                "persona": {"first_name": "Jane", "dob": "01/15/1960"},
+            }
+        )
+        flow._extract_persona_from_crew(crew_output)
+
+        assert flow.state.generation_persona["first_name"] == "Jane"
+        assert flow.state.generation_persona["dob"] == "01/15/1960"
+
+    def test_persona_accumulates_across_pages(self):
+        """Persona should accumulate data from multiple pages."""
+        flow = _make_flow(
+            generation_mode="dynamic",
+            generation_persona={"first_name": "Jane"},
+        )
+        crew_output = json.dumps(
+            {
+                "persona": {"first_name": "Jane", "address": "123 Main St"},
+            }
+        )
+        flow._extract_persona_from_crew(crew_output)
+
+        assert flow.state.generation_persona["first_name"] == "Jane"
+        assert flow.state.generation_persona["address"] == "123 Main St"
+
+    def test_persona_fallback_to_generated_data(self):
+        """If no 'persona' key, use 'generated_data' as fallback."""
+        flow = _make_flow(generation_mode="dynamic")
+        crew_output = json.dumps(
+            {
+                "generated_data": {"email": "jane@test.com"},
+            }
+        )
+        flow._extract_persona_from_crew(crew_output)
+
+        assert flow.state.generation_persona["email"] == "jane@test.com"
+
+    def test_persona_extraction_handles_garbage(self):
+        """_extract_persona_from_crew should not crash on non-JSON output."""
+        flow = _make_flow(generation_mode="dynamic")
+        flow._extract_persona_from_crew("This is not JSON at all")
+        assert flow.state.generation_persona == {}
+
+    def test_dynamic_mode_task_labels(self):
+        """Dynamic mode should use 5 task labels including 'generate'."""
+        flow = _make_flow(generation_mode="dynamic")
+        if flow.state.generation_mode == "dynamic":
+            labels = ["analyze", "generate", "map", "fill", "verify"]
+        else:
+            labels = ["analyze", "map", "fill", "verify"]
+        assert len(labels) == 5
+        assert "generate" in labels
+
+
+class TestBuildPageCrewModes:
+    """Test build_page_crew with static and dynamic generation_mode."""
+
+    def test_static_mode_returns_4_agents(self):
+        from unittest.mock import patch
+
+        with (
+            patch("src.flow.page_crew.create_page_analyzer") as mock_pa,
+            patch("src.flow.page_crew.create_field_mapper") as mock_fm,
+            patch("src.flow.page_crew.create_form_filler") as mock_ff,
+            patch("src.flow.page_crew.create_result_verifier") as mock_rv,
+            patch("src.flow.page_crew.LLM"),
+            patch("src.flow.page_crew.Task") as MockTask,
+            patch("src.flow.page_crew.Crew") as MockCrew,
+        ):
+            mock_pa.return_value = MagicMock()
+            mock_fm.return_value = MagicMock()
+            mock_ff.return_value = MagicMock()
+            mock_rv.return_value = MagicMock()
+            MockTask.return_value = MagicMock()
+            MockCrew.return_value = MagicMock()
+
+            from src.flow.page_crew import build_page_crew
+
+            mock_settings = MagicMock()
+            mock_settings.openai_api_key.get_secret_value.return_value = "key"
+            mock_settings.openai_api_base = ""
+            mock_settings.llm_model = "gpt-test"
+
+            crew, collector = build_page_crew(
+                MagicMock(),
+                mock_settings,
+                generation_mode="static",
+            )
+            # Static mode: 4 tasks (analyze, map, fill, verify)
+            crew_call_kwargs = MockCrew.call_args[1]
+            assert len(crew_call_kwargs["agents"]) == 4
+            assert len(crew_call_kwargs["tasks"]) == 4
+
+    def test_dynamic_mode_returns_5_agents(self):
+        from unittest.mock import patch
+
+        with (
+            patch("src.flow.page_crew.create_page_analyzer") as mock_pa,
+            patch("src.flow.page_crew.create_data_generator") as mock_dg,
+            patch("src.flow.page_crew.create_field_mapper") as mock_fm,
+            patch("src.flow.page_crew.create_form_filler") as mock_ff,
+            patch("src.flow.page_crew.create_result_verifier") as mock_rv,
+            patch("src.flow.page_crew.LLM"),
+            patch("src.flow.page_crew.Task") as MockTask,
+            patch("src.flow.page_crew.Crew") as MockCrew,
+        ):
+            mock_pa.return_value = MagicMock()
+            mock_dg.return_value = MagicMock()
+            mock_fm.return_value = MagicMock()
+            mock_ff.return_value = MagicMock()
+            mock_rv.return_value = MagicMock()
+            MockTask.return_value = MagicMock()
+            MockCrew.return_value = MagicMock()
+
+            from src.flow.page_crew import build_page_crew
+
+            mock_settings = MagicMock()
+            mock_settings.openai_api_key.get_secret_value.return_value = "key"
+            mock_settings.openai_api_base = ""
+            mock_settings.llm_model = "gpt-test"
+
+            crew, collector = build_page_crew(
+                MagicMock(),
+                mock_settings,
+                generation_mode="dynamic",
+            )
+            # Dynamic mode: 5 tasks (analyze, generate, map, fill, verify)
+            crew_call_kwargs = MockCrew.call_args[1]
+            assert len(crew_call_kwargs["agents"]) == 5
+            assert len(crew_call_kwargs["tasks"]) == 5

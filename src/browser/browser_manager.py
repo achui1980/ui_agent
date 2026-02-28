@@ -49,7 +49,7 @@ class BrowserManager:
 
     def navigate(self, url: str) -> None:
         logger.info(f"Navigating to {url}")
-        self.page.goto(url, wait_until="networkidle")
+        self.page.goto(url, wait_until="domcontentloaded")
         logger.info(f"Navigation complete: {self.page.title()}")
 
     def close(self) -> None:

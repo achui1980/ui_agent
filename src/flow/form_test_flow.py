@@ -39,6 +39,10 @@ class FormTestState(BaseModel):
     # Page context (for NL parsing)
     page_context: dict = {}
 
+    # Dynamic generation mode
+    generation_mode: str = "static"  # "static" | "dynamic"
+    generation_persona: dict[str, str] = {}  # accumulated persona across pages
+
     # Page loop state
     current_page_index: int = 0
     consumed_fields: list[str] = []
@@ -72,6 +76,16 @@ class FormTestFlow(Flow[FormTestState]):
     def parse_test_case(self) -> str:
         """Detect input type. NL files need page analysis first."""
         self.state.start_time = time.time()
+
+        # Dynamic generation mode: no test file needed, go straight to browser
+        if self.state.generation_mode == "dynamic":
+            if not self.state.test_case_id:
+                self.state.test_case_id = f"GEN_{int(time.time())}"
+            logger.info(
+                f"Dynamic generation mode for '{self.state.test_case_id}', "
+                "skipping test data parsing"
+            )
+            return "parsed"
 
         # If test case data was pre-loaded (multi-case execution), skip parsing
         if self.state.test_case_id:
@@ -238,7 +252,11 @@ class FormTestFlow(Flow[FormTestState]):
         )
 
         page = self._browser_manager.page
-        crew, collector = build_page_crew(page, self._settings)
+        crew, collector = build_page_crew(
+            page,
+            self._settings,
+            generation_mode=self.state.generation_mode,
+        )
 
         page_start = time.time()
         result = crew.kickoff(
@@ -246,12 +264,16 @@ class FormTestFlow(Flow[FormTestState]):
                 "test_data": json.dumps(self.state.test_case_data),
                 "consumed_fields": json.dumps(self.state.consumed_fields),
                 "validation_errors": json.dumps(self.state.validation_errors),
+                "generation_persona": json.dumps(self.state.generation_persona),
             }
         )
         page_duration = round(time.time() - page_start, 2)
 
         # Extract per-task timing from CrewAI's built-in instrumentation
-        task_labels = ["analyze", "map", "fill", "verify"]
+        if self.state.generation_mode == "dynamic":
+            task_labels = ["analyze", "generate", "map", "fill", "verify"]
+        else:
+            task_labels = ["analyze", "map", "fill", "verify"]
         task_durations: dict[str, float] = {}
         for i, task in enumerate(crew.tasks):
             label = task_labels[i] if i < len(task_labels) else f"task_{i}"
@@ -323,6 +345,12 @@ class FormTestFlow(Flow[FormTestState]):
 
             field_results = parsed.get("field_results", [])
 
+            # In dynamic mode, extract generated persona from crew tasks.
+            # The generate_task output (second task in dynamic crew) contains
+            # the updated persona. We scan all task outputs for persona data.
+            if self.state.generation_mode == "dynamic":
+                self._extract_persona_from_crew(result)
+
         except Exception as e:
             logger.warning(f"Could not parse crew result as JSON: {e}")
             # Heuristic: if no errors mentioned, assume passed
@@ -383,6 +411,49 @@ class FormTestFlow(Flow[FormTestState]):
         if start >= 0:
             return json.loads(text[start : end + 1])
         raise ValueError("No JSON object found in text")
+
+    def _extract_persona_from_crew(self, result: Any) -> None:
+        """Extract persona data from dynamic generation crew output.
+
+        Scans the raw crew result for a 'persona' key in JSON blocks and
+        merges it into the flow state's generation_persona.
+        """
+        raw = str(result)
+        # Try to find all JSON blocks and look for persona data
+        depth = 0
+        blocks: list[str] = []
+        end_pos = -1
+        for i in range(len(raw) - 1, -1, -1):
+            if raw[i] == "}":
+                if depth == 0:
+                    end_pos = i
+                depth += 1
+            elif raw[i] == "{":
+                depth -= 1
+                if depth == 0 and end_pos >= 0:
+                    blocks.append(raw[i : end_pos + 1])
+
+        for block in blocks:
+            try:
+                parsed = json.loads(block)
+                if "persona" in parsed and isinstance(parsed["persona"], dict):
+                    self.state.generation_persona.update(parsed["persona"])
+                    logger.debug(
+                        f"Persona updated with {len(parsed['persona'])} fields"
+                    )
+                    return
+                if "generated_data" in parsed and isinstance(
+                    parsed["generated_data"], dict
+                ):
+                    # Fallback: if no explicit persona key, use generated_data
+                    self.state.generation_persona.update(parsed["generated_data"])
+                    logger.debug(
+                        "Persona updated from generated_data "
+                        f"({len(parsed['generated_data'])} fields)"
+                    )
+                    return
+            except (json.JSONDecodeError, TypeError):
+                continue
 
     @listen("complete")
     def generate_report(self) -> dict:

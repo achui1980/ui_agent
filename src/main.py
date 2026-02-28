@@ -139,6 +139,38 @@ def validate(test_file: str, url: str) -> None:
 
 @cli.command()
 @click.argument("url")
+@click.option("--max-pages", default=50, help="Max pages to process")
+@click.option("--max-retries", default=3, help="Max retries per page")
+def generate(url: str, max_pages: int, max_retries: int) -> None:
+    """Auto-fill a form with dynamically generated test data (no test file needed).
+
+    The system navigates to the URL, analyzes each form page, generates
+    realistic test data based on the fields it discovers, and fills the form
+    automatically.  Multi-step forms are supported with cross-page persona
+    consistency.
+    """
+    from src.flow.form_test_flow import FormTestFlow
+
+    settings = get_settings()
+    logger.info(f"Starting dynamic generation run: {url}")
+
+    flow = FormTestFlow(settings=settings)
+    flow.state.target_url = url
+    flow.state.max_pages = max_pages
+    flow.state.max_retries = max_retries
+    flow.state.generation_mode = "dynamic"
+
+    result = flow.kickoff()
+    if isinstance(result, dict):
+        logger.info(
+            f"Generate run complete. Status: {result.get('overall_status', '?')}"
+        )
+    else:
+        logger.info(f"Generate run complete. Status: {result}")
+
+
+@cli.command()
+@click.argument("url")
 @click.option("--visual/--no-visual", default=True, help="Enable VLM visual analysis")
 def analyze(url: str, visual: bool) -> None:
     """Analyze a single page (extract form fields) without filling."""

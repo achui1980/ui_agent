@@ -35,3 +35,23 @@ class TestValidateCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["validate", str(path)])
         assert result.exit_code != 0
+
+
+class TestGenerateCommand:
+    def test_generate_help(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["generate", "--help"])
+        assert result.exit_code == 0
+        assert "Auto-fill" in result.output
+        assert "dynamically generated" in result.output
+
+    def test_generate_requires_url(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["generate"])
+        assert result.exit_code != 0
+
+    def test_generate_accepts_options(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["generate", "--help"])
+        assert "--max-pages" in result.output
+        assert "--max-retries" in result.output
