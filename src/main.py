@@ -170,7 +170,7 @@ def analyze(url: str, visual: bool) -> None:
             analyzer = ScreenshotAnalysisTool(
                 page=page,
                 vlm_model=settings.vlm_model,
-                vlm_api_key=settings.openai_api_key,
+                vlm_api_key=settings.openai_api_key.get_secret_value(),
                 vlm_api_base=settings.openai_api_base,
                 vlm_max_tokens=settings.vlm_max_tokens,
                 screenshot_dir=settings.awa_screenshot_dir,

@@ -25,7 +25,7 @@ def build_page_crew(
     llm = LLM(
         model=settings.llm_model,
         base_url=settings.openai_api_base or None,
-        api_key=settings.openai_api_key,
+        api_key=settings.openai_api_key.get_secret_value(),
     )
 
     # Agents

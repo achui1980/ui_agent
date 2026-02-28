@@ -36,7 +36,7 @@ class ScreenshotAnalysisTool(BaseTool):
     args_schema: type[BaseModel] = ScreenshotAnalysisInput
     page: Any = None
     vlm_model: str = ""
-    vlm_api_key: str = ""
+    vlm_api_key: str = Field(default="", exclude=True, repr=False)
     vlm_api_base: str = ""
     vlm_max_tokens: int = 1000
     screenshot_dir: str = "reports/screenshots"

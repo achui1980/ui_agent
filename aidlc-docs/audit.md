@@ -92,3 +92,74 @@
 **上下文**: 模块更新策略：按依赖关系顺序执行 FR-07 → FR-05 → FR-04 → FR-03 → FR-02 → FR-06 → FR-01。
 
 ---
+
+## 工作流规划 — 用户审批
+**时间戳**: 2026-02-28T12:40:00Z
+**用户输入**: "Approved"
+**AI 响应**: 执行计划审批通过，进入构建阶段（代码生成）。
+**上下文**: 启动阶段全部完成，开始按 FR-07 → FR-05 → FR-04 → FR-03 → FR-02 → FR-06 → FR-01 顺序实施。
+
+---
+
+## 代码生成 — FR-07 validation_errors
+**时间戳**: 2026-02-28T12:45:00Z
+**AI 响应**: 检查 `page_result.py`，发现 `validation_errors` 已经是 `list[str]` 类型，无需修改。FR-07 已满足。
+**上下文**: 代码生成阶段开始，FR-07 是第一个实施项。
+
+---
+
+## 代码生成 — FR-05 page_index 递增
+**时间戳**: 2026-02-28T12:50:00Z
+**AI 响应**: 修改 `form_test_flow.py` 的 `process_page()` 方法，每次调用时递增 `page_index`。添加 4 个单元测试验证递增行为。
+**上下文**: commit `eb8c309`（与 FR-02/03/04 合并提交）。
+
+---
+
+## 代码生成 — FR-04 screenshot_path 填充
+**时间戳**: 2026-02-28T13:00:00Z
+**AI 响应**: 修改 `screenshot_tool.py` 返回路径信息，修改 `_update_state_from_crew_result()` 提取 screenshot_path。添加相应单元测试。
+**上下文**: commit `eb8c309`。
+
+---
+
+## 代码生成 — FR-03 四级状态
+**时间戳**: 2026-02-28T13:10:00Z
+**AI 响应**: 在 `report.py` 中实现四级状态逻辑：PASS（全部成功）、PASS_WITH_RETRIES（有重试但最终成功）、PARTIAL（部分成功）、FAIL（全部失败）。修改 `finalize_report()` 使用新逻辑。添加 5 个单元测试。
+**上下文**: commit `eb8c309`。
+
+---
+
+## 代码生成 — FR-02 错误恢复
+**时间戳**: 2026-02-28T13:20:00Z
+**AI 响应**: 在 `page_crew.py` 的 `kickoff()` 方法中添加 try/except，捕获异常时保存部分结果并标记状态为 ERROR。添加 3 个单元测试。
+**上下文**: commit `eb8c309`。
+
+---
+
+## 代码生成 — FR-06 fields_filled 双层收集
+**时间戳**: 2026-02-28T13:40:00Z
+**AI 响应**: 创建 `FieldCollector` 类（`src/utils/field_collector.py`），集成到所有 5 个表单工具中。修改 `page_crew.py` 传递收集器，合并 Tool 层和 LLM 层结果。添加 12 个单元测试。
+**上下文**: commit `8c96848`。99 个单元测试全部通过。
+
+---
+
+## 代码生成 — FR-01 E2E 测试
+**时间戳**: 2026-02-28T14:00:00Z
+**AI 响应**: 创建 `tests/test_e2e/test_e2e_flow.py`，使用 Flask 测试服务器 + 真实 LLM + Playwright 进行端到端测试。标记 `@pytest.mark.e2e`，默认跳过（需 `pytest -m e2e` 运行）。
+**上下文**: commit `959437c`。E2E 测试依赖真实 LLM（~276K tokens/run），需手动触发。
+
+---
+
+## 代码生成 — NFR-01 API Key 保护
+**时间戳**: 2026-02-28T14:30:00Z
+**AI 响应**: 实施 3 项安全改进：(1) `config.py` 中 `openai_api_key` 改为 `SecretStr`，4 个调用点改为 `.get_secret_value()`；(2) `ScreenshotAnalysisTool.vlm_api_key` 加 `exclude=True, repr=False`；(3) 添加 6 个安全单元测试验证 key 不泄露。
+**上下文**: NFR-01 完成。API key 在 repr/str/model_dump 中不可见。
+
+---
+
+## 代码生成 — NFR-02 日志 PII 保护
+**时间戳**: 2026-02-28T14:30:00Z
+**AI 响应**: 在 `utils/logging.py` 中添加 PII 脱敏 filter，对 INFO+ 级别日志自动替换 SSN、邮箱、API key、电话号码、信用卡号等敏感模式。DEBUG 级别不过滤（保留开发调试能力）。添加 7 个脱敏单元测试。
+**上下文**: NFR-02 完成。112 个测试全部通过（99 原有 + 13 新增安全测试）。
+
+---

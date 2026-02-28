@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from pydantic_settings import BaseSettings
-from pydantic import Field
+from pydantic import Field, SecretStr
 
 
 class Settings(BaseSettings):
     # LLM
-    openai_api_key: str = Field(default="")
+    openai_api_key: SecretStr = Field(default=SecretStr(""))
     openai_api_base: str = Field(default="")
     https_proxy: str = Field(default="")
     llm_model: str = Field(default="gpt-5.2")

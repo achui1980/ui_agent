@@ -54,7 +54,7 @@ flowchart TD
         RE["逆向工程<br/><b>已完成</b>"]
         RA["需求分析<br/><b>已完成</b>"]
         US["用户故事<br/><b>跳过</b>"]
-        WP["工作流规划<br/><b>进行中</b>"]
+        WP["工作流规划<br/><b>已完成</b>"]
         AD["应用设计<br/><b>跳过</b>"]
         UG["工作单元生成<br/><b>跳过</b>"]
     end
@@ -63,9 +63,9 @@ flowchart TD
         FD["功能设计<br/><b>跳过</b>"]
         NFR["非功能需求/设计<br/><b>跳过</b>"]
         ID["基础设施设计<br/><b>跳过</b>"]
-        CP["代码规划<br/><b>执行</b>"]
-        CG["代码生成<br/><b>执行</b>"]
-        BT["构建与测试<br/><b>执行</b>"]
+        CP["代码规划<br/><b>已完成</b>"]
+        CG["代码生成<br/><b>已完成</b>"]
+        BT["构建与测试<br/><b>进行中</b>"]
     end
 
     Start --> WD --> RE --> RA --> WP
@@ -75,7 +75,7 @@ flowchart TD
     style WD fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style RE fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style RA fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
-    style WP fill:#FFA726,stroke:#E65100,stroke-width:3px,color:#000
+    style WP fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style US fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
     style AD fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
     style UG fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
@@ -84,7 +84,7 @@ flowchart TD
     style ID fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
     style CP fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style CG fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
-    style BT fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    style BT fill:#FFA726,stroke:#E65100,stroke-width:3px,color:#000
     style Start fill:#CE93D8,stroke:#6A1B9A,stroke-width:3px,color:#000
     style End fill:#CE93D8,stroke:#6A1B9A,stroke-width:3px,color:#000
 ```
@@ -99,7 +99,7 @@ flowchart TD
 - [x] 需求分析（已完成）— 7 FR + 2 NFR
 - [x] 用户故事 — **跳过**
   - **理由**: 纯技术性 bug 修复和增强，无用户角色变更，无新用户交互流程
-- [x] 工作流规划（进行中）
+- [x] 工作流规划（已完成）
 - [ ] 应用设计 — **跳过**
   - **理由**: 不涉及新组件或新服务，所有变更在现有组件边界内
 - [ ] 工作单元生成 — **跳过**
@@ -112,12 +112,12 @@ flowchart TD
   - **理由**: NFR 已在需求文档中定义（NFR-01/02），不需要独立的 NFR 设计阶段
 - [ ] 基础设施设计 — **跳过**
   - **理由**: 无基础设施变更
-- [ ] 代码规划 — **执行**
+- [x] 代码规划 — **已完成**
   - **理由**: 7 个需求需要详细的实施步骤规划
-- [ ] 代码生成 — **执行**
-  - **理由**: 按计划实施代码变更
-- [ ] 构建与测试 — **执行**
-  - **理由**: 运行 pytest + E2E 测试验证所有变更
+- [x] 代码生成 — **已完成**
+  - **理由**: 按计划实施代码变更，FR-07→FR-05→FR-04→FR-03→FR-02→FR-06→FR-01 全部完成
+- [ ] 构建与测试 — **进行中**
+  - **理由**: 99 个单元测试通过，E2E 测试已创建，待最终验证
 
 ### 运维阶段
 - [ ] 运维 — 占位符（暂不执行）
