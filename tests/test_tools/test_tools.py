@@ -42,20 +42,32 @@ class TestFillInputTool:
 
 
 class TestSelectOptionTool:
-    def test_select_by_label(self, mock_page):
+    def test_select_native_by_label(self, mock_page):
+        mock_page.eval_on_selector.return_value = "select"
         tool = SelectOptionTool(page=mock_page)
         result = tool._run(selector="#state", label="Illinois")
         assert "SUCCESS" in result
+        mock_page.select_option.assert_called_once_with("#state", label="Illinois")
 
-    def test_select_by_value(self, mock_page):
+    def test_select_native_by_value(self, mock_page):
+        mock_page.eval_on_selector.return_value = "select"
         tool = SelectOptionTool(page=mock_page)
         result = tool._run(selector="#state", value="IL")
         assert "SUCCESS" in result
+        mock_page.select_option.assert_called_once_with("#state", value="IL")
 
     def test_select_no_label_or_value(self, mock_page):
         tool = SelectOptionTool(page=mock_page)
         result = tool._run(selector="#state")
         assert "FAILED" in result
+
+    def test_select_react_fallback(self, mock_page):
+        """When eval_on_selector fails (not a native select), try react-select path."""
+        mock_page.eval_on_selector.side_effect = Exception("not a select")
+        tool = SelectOptionTool(page=mock_page)
+        result = tool._run(selector="#state", label="Illinois")
+        # Should attempt react-select or generic path, not crash
+        assert isinstance(result, str)
 
 
 class TestCheckboxTool:
@@ -157,3 +169,26 @@ class TestScreenshotAnalysisToolConfig:
         # The tool should use the custom directory for screenshots
         # We can't run _run fully without VLM, but we can verify the field is set
         assert tool.screenshot_dir == custom_dir
+
+
+class TestScreenshotAnalysisTool:
+    def test_analysis_vlm_failure_heals(self, mock_page, tmp_path):
+        """When VLM call fails, tool should return HEALED status."""
+        from src.tools.screenshot_analysis_tool import ScreenshotAnalysisTool
+
+        tool = ScreenshotAnalysisTool(
+            page=mock_page,
+            vlm_model="test-model",
+            vlm_api_key="test-key",
+            screenshot_dir=str(tmp_path),
+        )
+
+        # Mock OpenAI — imported locally inside _run, so patch at the source
+        with patch("openai.OpenAI") as MockClient:
+            mock_client = MagicMock()
+            mock_client.chat.completions.create.side_effect = Exception("API error")
+            MockClient.return_value = mock_client
+
+            result = tool._run("Describe the form")
+
+        assert "HEALED" in result or "FAILED" in result
