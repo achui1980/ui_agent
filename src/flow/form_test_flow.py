@@ -5,7 +5,12 @@ import os
 import time
 from typing import Any
 
-from crewai.flow.flow import Flow, listen, router, start
+from crewai.flow.flow import (
+    Flow,
+    listen,
+    router,
+    start,
+)  # router used by route_after_parse
 from loguru import logger
 from pydantic import BaseModel
 
@@ -96,7 +101,7 @@ class FormTestFlow(Flow[FormTestState]):
             return "pre_analyze"
 
     @listen("pre_analyze")
-    def pre_analyze_page(self) -> str:
+    def pre_analyze_page(self) -> dict:
         """For NL input: open browser, extract DOM, then parse NL with page context."""
         if not self.state.target_url:
             raise ValueError("URL is required for natural language (.txt) test files")
@@ -138,17 +143,17 @@ class FormTestFlow(Flow[FormTestState]):
             f"{len(tc.data)} fields (context-aware)"
         )
 
-        # Chain directly into the page processing loop (browser already started above).
-        # Because we're calling process_page directly (not via Flow event system),
-        # @router(process_page) won't fire automatically, so we drive the loop here.
+        # Drive the page processing loop (browser already started above).
         return self._run_page_loop()
 
     def _run_page_loop(self) -> dict:
-        """Drive the page-processing loop manually.
+        """Drive the page-processing loop.
 
-        Used when the NL path calls process_page directly (outside the Flow
-        event system), so @router(process_page) / @listen decorators won't
-        trigger automatically.
+        This is the unified page loop engine used by both NL and non-NL paths.
+        It calls process_page() directly and handles routing decisions
+        (next page / retry / complete) in an explicit while-loop, avoiding
+        the CrewAI Flow event system which does not support re-entrant
+        method calls from @listen handlers.
         """
         while True:
             result = self.process_page()  # noqa: arg-type
@@ -185,29 +190,28 @@ class FormTestFlow(Flow[FormTestState]):
         self.state.expected_outcome = tc.expected_outcome
 
     @listen("open_browser")
-    def open_browser_and_navigate(self) -> str:
-        """Start Playwright and navigate to target URL."""
+    def open_browser_and_navigate(self) -> dict:
+        """Start Playwright, navigate to target URL, and drive the page loop."""
         if not self.state.target_url:
             raise ValueError("No target URL specified")
 
         # If browser already started (from NL pre-analysis), skip
         if self._browser_manager is not None:
             logger.info("Browser already started (from NL pre-analysis), skipping")
-            return "navigated"
+        else:
+            self._browser_manager = BrowserManager(self._settings)
+            self._browser_manager.start()
+            self._browser_manager.navigate(self.state.target_url)
 
-        self._browser_manager = BrowserManager(self._settings)
-        self._browser_manager.start()
-        self._browser_manager.navigate(self.state.target_url)
         logger.info("Browser ready, starting page processing")
-        return "navigated"
+        return self._run_page_loop()
 
-    @listen(open_browser_and_navigate)
     def process_page(self) -> str:
         """Trigger PageCrew to process the current page."""
         if self.state.current_page_index >= self.state.max_pages:
             logger.warning("Max pages reached, stopping")
             self.state.overall_status = "PARTIAL"
-            return "crew_done"
+            return "max_pages_reached"
 
         logger.info(
             f"Processing page {self.state.current_page_index + 1} "
@@ -217,6 +221,7 @@ class FormTestFlow(Flow[FormTestState]):
         page = self._browser_manager.page
         crew = build_page_crew(page, self._settings)
 
+        page_start = time.time()
         result = crew.kickoff(
             inputs={
                 "test_data": json.dumps(self.state.test_case_data),
@@ -224,11 +229,45 @@ class FormTestFlow(Flow[FormTestState]):
                 "validation_errors": json.dumps(self.state.validation_errors),
             }
         )
+        page_duration = round(time.time() - page_start, 2)
 
-        self._update_state_from_crew_result(result)
+        # Extract per-task timing from CrewAI's built-in instrumentation
+        task_labels = ["analyze", "map", "fill", "verify"]
+        task_durations: dict[str, float] = {}
+        for i, task in enumerate(crew.tasks):
+            label = task_labels[i] if i < len(task_labels) else f"task_{i}"
+            dur = getattr(task, "execution_duration", None)
+            if dur is not None:
+                task_durations[label] = round(dur, 2)
+
+        # Extract token usage from CrewOutput
+        token_usage: dict[str, int] = {}
+        if hasattr(result, "token_usage") and result.token_usage:
+            try:
+                token_usage = result.token_usage.model_dump()
+            except Exception:
+                token_usage = {}
+
+        logger.info(
+            f"Page {self.state.current_page_index + 1} completed in {page_duration}s | "
+            f"Tasks: {task_durations} | Tokens: {token_usage.get('total_tokens', '?')}"
+        )
+
+        self._update_state_from_crew_result(
+            result,
+            page_duration=page_duration,
+            task_durations=task_durations,
+            token_usage=token_usage,
+        )
         return "crew_done"
 
-    def _update_state_from_crew_result(self, result: Any) -> None:
+    def _update_state_from_crew_result(
+        self,
+        result: Any,
+        page_duration: float = 0.0,
+        task_durations: dict[str, float] | None = None,
+        token_usage: dict[str, int] | None = None,
+    ) -> None:
         """Parse crew output and update flow state."""
         raw = str(result)
         logger.debug(f"Crew result (raw): {raw[:500]}")
@@ -279,6 +318,9 @@ class FormTestFlow(Flow[FormTestState]):
                 "verification_passed": self.state.verification_passed,
                 "validation_errors": self.state.validation_errors,
                 "retry_count": self.state.retry_count,
+                "duration_seconds": page_duration,
+                "task_durations": task_durations or {},
+                "token_usage": token_usage or {},
             }
         )
 
@@ -307,39 +349,6 @@ class FormTestFlow(Flow[FormTestState]):
             return json.loads(text[start : end + 1])
         raise ValueError("No JSON object found in text")
 
-    @router(process_page)
-    def decide_next_step(self) -> str:
-        """Decide: next_page / retry / complete."""
-        if self.state.verification_passed:
-            if self.state.current_page_id == "completion":
-                logger.info("Form completed successfully")
-                return "complete"
-            logger.info("Page passed, advancing to next page")
-            return "next_page"
-        elif self.state.retry_count < self.state.max_retries:
-            logger.info(
-                f"Verification failed, retrying "
-                f"({self.state.retry_count + 1}/{self.state.max_retries})"
-            )
-            return "retry"
-        else:
-            logger.warning("Max retries exceeded, completing with errors")
-            return "complete"
-
-    @listen("next_page")
-    def advance_to_next_page(self) -> str:
-        """Advance to the next page and re-enter process_page."""
-        self.state.current_page_index += 1
-        self.state.retry_count = 0
-        self.state.validation_errors = []
-        return self.process_page()
-
-    @listen("retry")
-    def retry_current_page(self) -> str:
-        """Retry the current page with error context."""
-        self.state.retry_count += 1
-        return self.process_page()
-
     @listen("complete")
     def generate_report(self) -> dict:
         """Generate the final test report and clean up."""
@@ -365,8 +374,25 @@ class FormTestFlow(Flow[FormTestState]):
                     verification_passed=pr.get("verification_passed", False),
                     validation_errors=pr.get("validation_errors", []),
                     retry_count=pr.get("retry_count", 0),
+                    duration_seconds=pr.get("duration_seconds", 0.0),
+                    task_durations=pr.get("task_durations", {}),
+                    token_usage=pr.get("token_usage", {}),
                 )
             )
+
+        # Aggregate token usage across all pages
+        total_tokens = sum(
+            pr.get("token_usage", {}).get("total_tokens", 0)
+            for pr in self.state.page_results
+        )
+        prompt_tokens = sum(
+            pr.get("token_usage", {}).get("prompt_tokens", 0)
+            for pr in self.state.page_results
+        )
+        completion_tokens = sum(
+            pr.get("token_usage", {}).get("completion_tokens", 0)
+            for pr in self.state.page_results
+        )
 
         report = TestReport(
             test_case_id=self.state.test_case_id,
@@ -382,6 +408,9 @@ class FormTestFlow(Flow[FormTestState]):
             ),
             end_time=time.strftime("%Y-%m-%d %H:%M:%S"),
             duration_seconds=round(duration, 2),
+            total_tokens=total_tokens,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
         )
 
         # Save reports

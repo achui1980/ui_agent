@@ -14,3 +14,6 @@ class TestReport(BaseModel):
     start_time: str
     end_time: str
     duration_seconds: float
+    total_tokens: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
