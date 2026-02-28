@@ -26,6 +26,7 @@ class DatePickerTool(BaseTool):
     )
     args_schema: type[BaseModel] = DatePickerInput
     page: Any = None
+    collector: Any = None  # FieldResultCollector instance
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -42,7 +43,9 @@ class DatePickerTool(BaseTool):
             self.page.wait_for_timeout(200)
             locator.press("Escape")
             self.page.wait_for_timeout(300)
-            return f"SUCCESS: Date filled '{selector}' with '{value}'"
+            result = f"SUCCESS: Date filled '{selector}' with '{value}'"
+            self._record_result(selector, value, result)
+            return result
         except Exception:
             pass
 
@@ -52,7 +55,9 @@ class DatePickerTool(BaseTool):
             locator.wait_for(state="visible", timeout=10000)
             locator.scroll_into_view_if_needed()
             locator.fill(value)
-            return f"HEALED: Date direct-filled '{selector}' with '{value}'"
+            result = f"HEALED: Date direct-filled '{selector}' with '{value}'"
+            self._record_result(selector, value, result)
+            return result
         except Exception:
             pass
 
@@ -71,6 +76,27 @@ class DatePickerTool(BaseTool):
                 }""",
                 value,
             )
-            return f"HEALED: Date set via JS on '{selector}' with '{value}'"
+            result = f"HEALED: Date set via JS on '{selector}' with '{value}'"
+            self._record_result(selector, value, result)
+            return result
         except Exception as e:
-            return f"FAILED: Could not set date on '{selector}': {e}"
+            result = f"FAILED: Could not set date on '{selector}': {e}"
+            self._record_result(selector, value, result)
+            return result
+
+    def _record_result(self, selector: str, value: str, result: str) -> None:
+        if not self.collector:
+            return
+        if "SUCCESS" in result:
+            status = "success"
+        elif "HEALED" in result:
+            status = "healed"
+        else:
+            status = "failed"
+        self.collector.record(
+            field_id=selector,
+            selector=selector,
+            value=value,
+            status=status,
+            error_message="" if status != "failed" else result,
+        )

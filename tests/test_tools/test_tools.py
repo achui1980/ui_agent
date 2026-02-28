@@ -192,3 +192,145 @@ class TestScreenshotAnalysisTool:
             result = tool._run("Describe the form")
 
         assert "HEALED" in result or "FAILED" in result
+
+
+class TestFieldResultCollector:
+    """Tests for the FieldResultCollector used in dual-layer field result collection."""
+
+    def test_record_and_get(self):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        collector = FieldResultCollector()
+        collector.record("name", "#name", "John", "success")
+        results = collector.get_results()
+        assert len(results) == 1
+        assert results[0]["field_id"] == "name"
+        assert results[0]["selector"] == "#name"
+        assert results[0]["value"] == "John"
+        assert results[0]["status"] == "success"
+        assert results[0]["error_message"] == ""
+
+    def test_record_with_error(self):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        collector = FieldResultCollector()
+        collector.record("email", "#email", "bad", "failed", "FAILED: invalid")
+        results = collector.get_results()
+        assert len(results) == 1
+        assert results[0]["status"] == "failed"
+        assert results[0]["error_message"] == "FAILED: invalid"
+
+    def test_multiple_records(self):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        collector = FieldResultCollector()
+        collector.record("name", "#name", "John", "success")
+        collector.record("email", "#email", "j@x.com", "success")
+        collector.record("state", "#state", "IL", "healed")
+        results = collector.get_results()
+        assert len(results) == 3
+
+    def test_clear(self):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        collector = FieldResultCollector()
+        collector.record("name", "#name", "John", "success")
+        collector.clear()
+        assert len(collector.get_results()) == 0
+
+    def test_get_returns_copy(self):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        collector = FieldResultCollector()
+        collector.record("name", "#name", "John", "success")
+        results1 = collector.get_results()
+        results2 = collector.get_results()
+        assert results1 == results2
+        assert results1 is not results2
+
+
+class TestToolCollectorIntegration:
+    """Tests that tools correctly record results to a FieldResultCollector."""
+
+    def test_fill_input_records_success(self, mock_page):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        collector = FieldResultCollector()
+        tool = FillInputTool(page=mock_page, collector=collector)
+        result = tool._run(selector="#name", value="John")
+        assert "SUCCESS" in result
+        results = collector.get_results()
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert results[0]["selector"] == "#name"
+        assert results[0]["value"] == "John"
+
+    def test_fill_input_records_healed(self, mock_page):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        locator = mock_page.locator.return_value
+        locator.fill.side_effect = Exception("fill failed")
+        collector = FieldResultCollector()
+        tool = FillInputTool(page=mock_page, collector=collector)
+        result = tool._run(selector="#name", value="John")
+        assert "HEALED" in result
+        results = collector.get_results()
+        assert len(results) == 1
+        assert results[0]["status"] == "healed"
+
+    def test_fill_input_records_failed(self, mock_page):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        locator = mock_page.locator.return_value
+        locator.fill.side_effect = Exception("fill failed")
+        locator.click.side_effect = Exception("click also failed")
+        collector = FieldResultCollector()
+        tool = FillInputTool(page=mock_page, collector=collector)
+        result = tool._run(selector="#name", value="John")
+        assert "FAILED" in result
+        results = collector.get_results()
+        assert len(results) == 1
+        assert results[0]["status"] == "failed"
+        assert results[0]["error_message"] != ""
+
+    def test_fill_input_no_collector(self, mock_page):
+        """Tool works fine without a collector (backward compatible)."""
+        tool = FillInputTool(page=mock_page, collector=None)
+        result = tool._run(selector="#name", value="John")
+        assert "SUCCESS" in result
+
+    def test_select_option_records_success(self, mock_page):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        mock_page.eval_on_selector.return_value = "select"
+        collector = FieldResultCollector()
+        tool = SelectOptionTool(page=mock_page, collector=collector)
+        result = tool._run(selector="#state", label="Illinois")
+        assert "SUCCESS" in result
+        results = collector.get_results()
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+
+    def test_checkbox_records_success(self, mock_page):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        collector = FieldResultCollector()
+        tool = CheckboxTool(page=mock_page, collector=collector)
+        result = tool._run(selector="#agree", check=True)
+        assert "SUCCESS" in result
+        results = collector.get_results()
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert results[0]["value"] == "True"
+
+    def test_date_picker_records_success(self, mock_page):
+        from src.tools.field_result_collector import FieldResultCollector
+
+        collector = FieldResultCollector()
+        tool = DatePickerTool(page=mock_page, collector=collector)
+        result = tool._run(selector="#dob", value="01/15/1990")
+        assert "SUCCESS" in result
+        results = collector.get_results()
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert results[0]["value"] == "01/15/1990"

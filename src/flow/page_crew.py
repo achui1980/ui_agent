@@ -8,10 +8,20 @@ from src.agents.page_analyzer import create_page_analyzer
 from src.agents.field_mapper import create_field_mapper
 from src.agents.form_filler import create_form_filler
 from src.agents.result_verifier import create_result_verifier
+from src.tools.field_result_collector import FieldResultCollector
 
 
-def build_page_crew(page: Page, settings: Settings) -> Crew:
-    """Build a Crew of 4 agents to process a single form page."""
+def build_page_crew(
+    page: Page,
+    settings: Settings,
+) -> tuple[Crew, FieldResultCollector]:
+    """Build a Crew of 4 agents to process a single form page.
+
+    Returns a tuple of (Crew, FieldResultCollector) so the caller can
+    extract tool-level field results after crew execution.
+    """
+    collector = FieldResultCollector()
+
     llm = LLM(
         model=settings.llm_model,
         base_url=settings.openai_api_base or None,
@@ -21,7 +31,7 @@ def build_page_crew(page: Page, settings: Settings) -> Crew:
     # Agents
     page_analyzer = create_page_analyzer(page, llm, settings)
     field_mapper = create_field_mapper(llm)
-    form_filler = create_form_filler(page, llm)
+    form_filler = create_form_filler(page, llm, collector=collector)
     result_verifier = create_result_verifier(page, llm, settings)
 
     # Tasks (sequential with context chaining)
@@ -94,7 +104,10 @@ def build_page_crew(page: Page, settings: Settings) -> Crew:
         ),
         expected_output=(
             "JSON with:\n"
-            "- field_results: [{field_id, selector, value, status, error_message}]\n"
+            "- field_results: an array of objects for EVERY field action you performed, "
+            "each with {field_id, selector, value, status, error_message}. "
+            'status must be one of: "success", "failed", "healed". '
+            "This array is REQUIRED even if all fields succeeded.\n"
             "- submit_clicked: true/false\n"
             "- submit_error: error message if submit failed"
         ),
@@ -129,4 +142,4 @@ def build_page_crew(page: Page, settings: Settings) -> Crew:
         tasks=[analyze_task, map_task, fill_task, verify_task],
         process=Process.sequential,
         verbose=True,
-    )
+    ), collector

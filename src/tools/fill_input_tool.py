@@ -22,6 +22,7 @@ class FillInputTool(BaseTool):
     )
     args_schema: type[BaseModel] = FillInputInput
     page: Any = None
+    collector: Any = None  # FieldResultCollector instance
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -34,7 +35,9 @@ class FillInputTool(BaseTool):
             # Dismiss any autocomplete/datepicker popups that may have appeared
             locator.press("Escape")
             self.page.wait_for_timeout(200)
-            return f"SUCCESS: Filled '{selector}' with '{value}'"
+            result = f"SUCCESS: Filled '{selector}' with '{value}'"
+            self._record_result(selector, value, result)
+            return result
         except Exception:
             # Self-healing: try press_sequentially
             try:
@@ -44,6 +47,27 @@ class FillInputTool(BaseTool):
                 locator.press_sequentially(value, delay=50)
                 locator.press("Escape")
                 self.page.wait_for_timeout(200)
-                return f"HEALED: Filled '{selector}' with slow typing"
+                result = f"HEALED: Filled '{selector}' with slow typing"
+                self._record_result(selector, value, result)
+                return result
             except Exception as e2:
-                return f"FAILED: Could not fill '{selector}': {e2}"
+                result = f"FAILED: Could not fill '{selector}': {e2}"
+                self._record_result(selector, value, result)
+                return result
+
+    def _record_result(self, selector: str, value: str, result: str) -> None:
+        if not self.collector:
+            return
+        if "SUCCESS" in result:
+            status = "success"
+        elif "HEALED" in result:
+            status = "healed"
+        else:
+            status = "failed"
+        self.collector.record(
+            field_id=selector,
+            selector=selector,
+            value=value,
+            status=status,
+            error_message="" if status != "failed" else result,
+        )

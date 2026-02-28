@@ -30,19 +30,25 @@ class SelectOptionTool(BaseTool):
     )
     args_schema: type[BaseModel] = SelectOptionInput
     page: Any = None
+    collector: Any = None  # FieldResultCollector instance
 
     model_config = {"arbitrary_types_allowed": True}
 
     def _run(self, selector: str, label: str = "", value: str = "") -> str:
         text = label or value
         if not text:
-            return "FAILED: No label or value provided"
+            result = "FAILED: No label or value provided"
+            self._record_result(selector, text, result)
+            return result
 
         # Strategy 1: native <select> element
         try:
             tag = self.page.eval_on_selector(selector, "el => el.tagName.toLowerCase()")
             if tag == "select":
-                return self._select_native(selector, label, value)
+                result = self._select_native(selector, label, value)
+                if result:
+                    self._record_result(selector, text, result)
+                    return result
         except Exception:
             pass
 
@@ -50,6 +56,7 @@ class SelectOptionTool(BaseTool):
         try:
             result = self._select_react(selector, text)
             if result:
+                self._record_result(selector, text, result)
                 return result
         except Exception:
             pass
@@ -58,11 +65,33 @@ class SelectOptionTool(BaseTool):
         try:
             result = self._select_generic(selector, text)
             if result:
+                self._record_result(selector, text, result)
                 return result
         except Exception as e:
-            return f"FAILED: Could not select '{text}' in '{selector}': {e}"
+            result = f"FAILED: Could not select '{text}' in '{selector}': {e}"
+            self._record_result(selector, text, result)
+            return result
 
-        return f"FAILED: Could not select '{text}' in '{selector}'"
+        result = f"FAILED: Could not select '{text}' in '{selector}'"
+        self._record_result(selector, text, result)
+        return result
+
+    def _record_result(self, selector: str, value: str, result: str) -> None:
+        if not self.collector:
+            return
+        if "SUCCESS" in result:
+            status = "success"
+        elif "HEALED" in result:
+            status = "healed"
+        else:
+            status = "failed"
+        self.collector.record(
+            field_id=selector,
+            selector=selector,
+            value=value,
+            status=status,
+            error_message="" if status != "failed" else result,
+        )
 
     def _select_native(self, selector: str, label: str, value: str) -> str:
         """Handle native <select> elements."""

@@ -238,7 +238,7 @@ class FormTestFlow(Flow[FormTestState]):
         )
 
         page = self._browser_manager.page
-        crew = build_page_crew(page, self._settings)
+        crew, collector = build_page_crew(page, self._settings)
 
         page_start = time.time()
         result = crew.kickoff(
@@ -277,6 +277,7 @@ class FormTestFlow(Flow[FormTestState]):
             page_duration=page_duration,
             task_durations=task_durations,
             token_usage=token_usage,
+            tool_field_results=collector.get_results(),
         )
         return "crew_done"
 
@@ -286,6 +287,7 @@ class FormTestFlow(Flow[FormTestState]):
         page_duration: float = 0.0,
         task_durations: dict[str, float] | None = None,
         token_usage: dict[str, int] | None = None,
+        tool_field_results: list[dict] | None = None,
     ) -> None:
         """Parse crew output and update flow state."""
         raw = str(result)
@@ -332,6 +334,12 @@ class FormTestFlow(Flow[FormTestState]):
                 self.state.verification_passed = True
             field_results = []
             screenshot = ""
+
+        # Dual-layer field results: prefer tool-level results (reliable),
+        # fall back to LLM-reported results if tool results are empty.
+        if tool_field_results:
+            field_results = tool_field_results
+        # else: keep field_results from LLM output (may be empty)
 
         # Record page result
         self.state.page_results.append(
