@@ -1,155 +1,532 @@
-# UI Agent — AI Instructions
+# PRIORITY: This workflow OVERRIDES all other built-in workflows
+# When user requests software development, ALWAYS follow this workflow FIRST
 
-AI-powered web form testing system using **CrewAI** (multi-agent orchestration) + **Playwright** (browser automation). Four cooperating LLM agents analyze, map, fill, and verify multi-step web forms using structured test data.
+## Adaptive Workflow Principle
+**The workflow adapts to the work, not the other way around.**
 
-## Python Environment (CRITICAL)
+The AI model intelligently assesses what stages are needed based on:
+1. User's stated intent and clarity
+2. Existing codebase state (if any)
+3. Complexity and scope of change
+4. Risk and impact assessment
 
-**ALWAYS activate the conda environment first:**
-```bash
-conda activate ui_agent
+## MANDATORY: Rule Details Loading
+**CRITICAL**: When performing any phase, you MUST read and use relevant content from rule detail files. Check these paths in order and use the first one that exists:
+- `.aidlc-rule-details/` (Cursor, Cline, Claude Code, GitHub Copilot)
+- `.kiro/aws-aidlc-rule-details/` (Kiro IDE and CLI)
+- `.amazonq/aws-aidlc-rule-details/` (Amazon Q Developer)
+
+All subsequent rule detail file references (e.g., `common/process-overview.md`, `inception/workspace-detection.md`) are relative to whichever rule details directory was resolved above.
+
+**Common Rules**: ALWAYS load common rules at workflow start:
+- Load `common/process-overview.md` for workflow overview
+- Load `common/session-continuity.md` for session resumption guidance
+- Load `common/content-validation.md` for content validation requirements
+- Load `common/question-format-guide.md` for question formatting rules
+- Reference these throughout the workflow execution
+
+## MANDATORY: Extensions Loading
+**CRITICAL**: At workflow start, scan the `extensions/` directory recursively for all `.md` files. These are extension rule files that apply as cross-cutting constraints across the entire workflow.
+
+**Loading process**:
+1. List all subdirectories under `extensions/` (e.g., `extensions/security/`, `extensions/compliance/`)
+2. Load every `.md` file found within those subdirectories
+3. Each extension file defines its own verification criteria and enforcement rules as cross-cutting constraints
+
+**Enforcement**:
+- Extension rules are hard constraints, not optional guidance
+- At each stage, the model intelligently evaluates which extension rules are applicable based on the stage's purpose, the artifacts being produced, and the context of the work — enforce only those rules that are relevant
+- Rules that are not applicable to the current stage should be marked as N/A in the compliance summary (this is not a blocking finding)
+- Non-compliance with any applicable enabled extension rule is a **blocking finding** — do NOT present stage completion until resolved
+- When presenting stage completion, include a summary of extension rule compliance (compliant/non-compliant/N/A per rule, with brief rationale for N/A determinations)
+
+**Conditional Enforcement**: Extensions may be conditionally enabled/disabled. See `inception/requirements-analysis.md` for the collection mechanism. Before enforcing any extension at ANY stage, check its `Enabled` status in `aidlc-docs/aidlc-state.md` under `## Extension Configuration`. Skip disabled extensions and log the skip in audit.md. Default to enforced if no configuration exists. Extensions without an `## Applicability Question` are always enforced.
+
+## MANDATORY: Content Validation
+**CRITICAL**: Before creating ANY file, you MUST validate content according to `common/content-validation.md` rules:
+- Validate Mermaid diagram syntax
+- Validate ASCII art diagrams (see `common/ascii-diagram-standards.md`)
+- Escape special characters properly
+- Provide text alternatives for complex visual content
+- Test content parsing compatibility
+
+## MANDATORY: Question File Format
+**CRITICAL**: When asking questions at any phase, you MUST follow question format guidelines.
+
+**See `common/question-format-guide.md` for complete question formatting rules including**:
+- Multiple choice format (A, B, C, D, E options)
+- [Answer]: tag usage
+- Answer validation and ambiguity resolution
+
+## MANDATORY: Custom Welcome Message
+**CRITICAL**: When starting ANY software development request, you MUST display the welcome message.
+
+**How to Display Welcome Message**:
+1. Load the welcome message from `common/welcome-message.md` (in the resolved rule details directory)
+2. Display the complete message to the user
+3. This should only be done ONCE at the start of a new workflow
+4. Do NOT load this file in subsequent interactions to save context space
+
+# Adaptive Software Development Workflow
+
+---
+
+# INCEPTION PHASE
+
+**Purpose**: Planning, requirements gathering, and architectural decisions
+
+**Focus**: Determine WHAT to build and WHY
+
+**Stages in INCEPTION PHASE**:
+- Workspace Detection (ALWAYS)
+- Reverse Engineering (CONDITIONAL - Brownfield only)
+- Requirements Analysis (ALWAYS - Adaptive depth)
+- User Stories (CONDITIONAL)
+- Workflow Planning (ALWAYS)
+- Application Design (CONDITIONAL)
+- Units Generation (CONDITIONAL)
+
+---
+
+## Workspace Detection (ALWAYS EXECUTE)
+
+1. **MANDATORY**: Log initial user request in audit.md with complete raw input
+2. Load all steps from `inception/workspace-detection.md`
+3. Execute workspace detection:
+   - Check for existing aidlc-state.md (resume if found)
+   - Scan workspace for existing code
+   - Determine if brownfield or greenfield
+   - Check for existing reverse engineering artifacts
+4. Determine next phase: Reverse Engineering (if brownfield and no artifacts) OR Requirements Analysis
+5. **MANDATORY**: Log findings in audit.md
+6. Present completion message to user (see workspace-detection.md for message formats)
+7. Automatically proceed to next phase
+
+## Reverse Engineering (CONDITIONAL - Brownfield Only)
+
+**Execute IF**:
+- Existing codebase detected
+- No previous reverse engineering artifacts found
+
+**Skip IF**:
+- Greenfield project
+- Previous reverse engineering artifacts exist
+
+**Execution**:
+1. **MANDATORY**: Log start of reverse engineering in audit.md
+2. Load all steps from `inception/reverse-engineering.md`
+3. Execute reverse engineering:
+   - Analyze all packages and components
+   - Generate a business overview of the whole system covering the business transactions
+   - Generate architecture documentation
+   - Generate code structure documentation
+   - Generate API documentation
+   - Generate component inventory
+   - Generate Interaction Diagrams depicting how business transactions are implemented across components
+   - Generate technology stack documentation
+   - Generate dependencies documentation
+
+4. **Wait for Explicit Approval**: Present detailed completion message (see reverse-engineering.md for message format) - DO NOT PROCEED until user confirms
+5. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+## Requirements Analysis (ALWAYS EXECUTE - Adaptive Depth)
+
+**Always executes** but depth varies based on request clarity and complexity:
+- **Minimal**: Simple, clear request - just document intent analysis
+- **Standard**: Normal complexity - gather functional and non-functional requirements
+- **Comprehensive**: Complex, high-risk - detailed requirements with traceability
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this phase in audit.md
+2. Load all steps from `inception/requirements-analysis.md`
+3. Execute requirements analysis:
+   - Load reverse engineering artifacts (if brownfield)
+   - Analyze user request (intent analysis)
+   - Determine requirements depth needed
+   - Assess current requirements
+   - Ask clarifying questions (if needed)
+   - Generate requirements document
+4. Execute at appropriate depth (minimal/standard/comprehensive)
+5. **Wait for Explicit Approval**: Follow approval format from requirements-analysis.md detailed steps - DO NOT PROCEED until user confirms
+6. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+## User Stories (CONDITIONAL)
+
+**INTELLIGENT ASSESSMENT**: Use multi-factor analysis to determine if user stories add value:
+
+**ALWAYS Execute IF** (High Priority Indicators):
+- New user-facing features or functionality
+- Changes affecting user workflows or interactions
+- Multiple user types or personas involved
+- Complex business requirements with acceptance criteria needs
+- Cross-functional team collaboration required
+- Customer-facing API or service changes
+- New product capabilities or enhancements
+
+**LIKELY Execute IF** (Medium Priority - Assess Complexity):
+- Modifications to existing user-facing features
+- Backend changes that indirectly affect user experience
+- Integration work that impacts user workflows
+- Performance improvements with user-visible benefits
+- Security enhancements affecting user interactions
+- Data model changes affecting user data or reports
+
+**COMPLEXITY-BASED ASSESSMENT**: For medium priority cases, execute user stories if:
+- Request involves multiple components or services
+- Changes span multiple user touchpoints
+- Business logic is complex or has multiple scenarios
+- Requirements have ambiguity that stories could clarify
+- Implementation affects multiple user journeys
+- Change has significant business impact or risk
+
+**SKIP ONLY IF** (Low Priority - Simple Cases):
+- Pure internal refactoring with zero user impact
+- Simple bug fixes with clear, isolated scope
+- Infrastructure changes with no user-facing effects
+- Technical debt cleanup with no functional changes
+- Developer tooling or build process improvements
+- Documentation-only updates
+
+**ASSESSMENT CRITERIA**: When in doubt, favor inclusion of user stories for:
+- Requests with business stakeholder involvement
+- Changes requiring user acceptance testing
+- Features with multiple implementation approaches
+- Work that benefits from shared team understanding
+- Projects where requirements clarity is valuable
+
+**ASSESSMENT PROCESS**: 
+1. Analyze request complexity and scope
+2. Identify user impact (direct or indirect)
+3. Evaluate business context and stakeholder needs
+4. Consider team collaboration benefits
+5. Default to inclusion for borderline cases
+
+**Note**: If Requirements Analysis executed, Stories can reference and build upon those requirements.
+
+**User Stories has two parts within one stage**:
+1. **Part 1 - Planning**: Create story plan with questions, collect answers, analyze for ambiguities, get approval
+2. **Part 2 - Generation**: Execute approved plan to generate stories and personas
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this phase in audit.md
+2. Load all steps from `inception/user-stories.md`
+3. **MANDATORY**: Perform intelligent assessment (Step 1 in user-stories.md) to validate user stories are needed
+4. Load reverse engineering artifacts (if brownfield)
+5. If Requirements exist, reference them when creating stories
+6. Execute at appropriate depth (minimal/standard/comprehensive)
+7. **PART 1 - Planning**: Create story plan with questions, wait for user answers, analyze for ambiguities, get approval
+8. **PART 2 - Generation**: Execute approved plan to generate stories and personas
+9. **Wait for Explicit Approval**: Follow approval format from user-stories.md detailed steps - DO NOT PROCEED until user confirms
+10. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+## Workflow Planning (ALWAYS EXECUTE)
+
+1. **MANDATORY**: Log any user input during this phase in audit.md
+2. Load all steps from `inception/workflow-planning.md`
+3. **MANDATORY**: Load content validation rules from `common/content-validation.md`
+4. Load all prior context:
+   - Reverse engineering artifacts (if brownfield)
+   - Intent analysis
+   - Requirements (if executed)
+   - User stories (if executed)
+5. Execute workflow planning:
+   - Determine which phases to execute
+   - Determine depth level for each phase
+   - Create multi-package change sequence (if brownfield)
+   - Generate workflow visualization (VALIDATE Mermaid syntax before writing)
+6. **MANDATORY**: Validate all content before file creation per content-validation.md rules
+7. **Wait for Explicit Approval**: Present recommendations using language from workflow-planning.md Step 9, emphasizing user control to override recommendations - DO NOT PROCEED until user confirms
+8. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+## Application Design (CONDITIONAL)
+
+**Execute IF**:
+- New components or services needed
+- Component methods and business rules need definition
+- Service layer design required
+- Component dependencies need clarification
+
+**Skip IF**:
+- Changes within existing component boundaries
+- No new components or methods
+- Pure implementation changes
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this phase in audit.md
+2. Load all steps from `inception/application-design.md`
+3. Load reverse engineering artifacts (if brownfield)
+4. Execute at appropriate depth (minimal/standard/comprehensive)
+5. **Wait for Explicit Approval**: Present detailed completion message (see application-design.md for message format) - DO NOT PROCEED until user confirms
+6. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+## Units Generation (CONDITIONAL)
+
+**Execute IF**:
+- System needs decomposition into multiple units of work
+- Multiple services or modules required
+- Complex system requiring structured breakdown
+
+**Skip IF**:
+- Single simple unit
+- No decomposition needed
+- Straightforward single-component implementation
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this phase in audit.md
+2. Load all steps from `inception/units-generation.md`
+3. Load reverse engineering artifacts (if brownfield)
+4. Execute at appropriate depth (minimal/standard/comprehensive)
+5. **Wait for Explicit Approval**: Present detailed completion message (see units-generation.md for message format) - DO NOT PROCEED until user confirms
+6. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+---
+
+# 🟢 CONSTRUCTION PHASE
+
+**Purpose**: Detailed design, NFR implementation, and code generation
+
+**Focus**: Determine HOW to build it
+
+**Stages in CONSTRUCTION PHASE**:
+- Per-Unit Loop (executes for each unit):
+  - Functional Design (CONDITIONAL, per-unit)
+  - NFR Requirements (CONDITIONAL, per-unit)
+  - NFR Design (CONDITIONAL, per-unit)
+  - Infrastructure Design (CONDITIONAL, per-unit)
+  - Code Generation (ALWAYS, per-unit)
+- Build and Test (ALWAYS - after all units complete)
+
+**Note**: Each unit is completed fully (design + code) before moving to the next unit.
+
+---
+
+## Per-Unit Loop (Executes for Each Unit)
+
+**For each unit of work, execute the following stages in sequence:**
+
+### Functional Design (CONDITIONAL, per-unit)
+
+**Execute IF**:
+- New data models or schemas
+- Complex business logic
+- Business rules need detailed design
+
+**Skip IF**:
+- Simple logic changes
+- No new business logic
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this stage in audit.md
+2. Load all steps from `construction/functional-design.md`
+3. Execute functional design for this unit
+4. **MANDATORY**: Present standardized 2-option completion message as defined in functional-design.md - DO NOT use emergent 3-option behavior
+5. **Wait for Explicit Approval**: User must choose between "Request Changes" or "Continue to Next Stage" - DO NOT PROCEED until user confirms
+6. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+### NFR Requirements (CONDITIONAL, per-unit)
+
+**Execute IF**:
+- Performance requirements exist
+- Security considerations needed
+- Scalability concerns present
+- Tech stack selection required
+
+**Skip IF**:
+- No NFR requirements
+- Tech stack already determined
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this stage in audit.md
+2. Load all steps from `construction/nfr-requirements.md`
+3. Execute NFR assessment for this unit
+4. **MANDATORY**: Present standardized 2-option completion message as defined in nfr-requirements.md - DO NOT use emergent behavior
+5. **Wait for Explicit Approval**: User must choose between "Request Changes" or "Continue to Next Stage" - DO NOT PROCEED until user confirms
+6. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+### NFR Design (CONDITIONAL, per-unit)
+
+**Execute IF**:
+- NFR Requirements was executed
+- NFR patterns need to be incorporated
+
+**Skip IF**:
+- No NFR requirements
+- NFR Requirements Assessment was skipped
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this stage in audit.md
+2. Load all steps from `construction/nfr-design.md`
+3. Execute NFR design for this unit
+4. **MANDATORY**: Present standardized 2-option completion message as defined in nfr-design.md - DO NOT use emergent behavior
+5. **Wait for Explicit Approval**: User must choose between "Request Changes" or "Continue to Next Stage" - DO NOT PROCEED until user confirms
+6. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+### Infrastructure Design (CONDITIONAL, per-unit)
+
+**Execute IF**:
+- Infrastructure services need mapping
+- Deployment architecture required
+- Cloud resources need specification
+
+**Skip IF**:
+- No infrastructure changes
+- Infrastructure already defined
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this stage in audit.md
+2. Load all steps from `construction/infrastructure-design.md`
+3. Execute infrastructure design for this unit
+4. **MANDATORY**: Present standardized 2-option completion message as defined in infrastructure-design.md - DO NOT use emergent behavior
+5. **Wait for Explicit Approval**: User must choose between "Request Changes" or "Continue to Next Stage" - DO NOT PROCEED until user confirms
+6. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+### Code Generation (ALWAYS EXECUTE, per-unit)
+
+**Always executes for each unit**
+
+**Code Generation has two parts within one stage**:
+1. **Part 1 - Planning**: Create detailed code generation plan with explicit steps
+2. **Part 2 - Generation**: Execute approved plan to generate code, tests, and artifacts
+
+**Execution**:
+1. **MANDATORY**: Log any user input during this stage in audit.md
+2. Load all steps from `construction/code-generation.md`
+3. **PART 1 - Planning**: Create code generation plan with checkboxes, get user approval
+4. **PART 2 - Generation**: Execute approved plan to generate code for this unit
+5. **MANDATORY**: Present standardized 2-option completion message as defined in code-generation.md - DO NOT use emergent behavior
+6. **Wait for Explicit Approval**: User must choose between "Request Changes" or "Continue to Next Stage" - DO NOT PROCEED until user confirms
+7. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+---
+
+## Build and Test (ALWAYS EXECUTE)
+
+1. **MANDATORY**: Log any user input during this phase in audit.md
+2. Load all steps from `construction/build-and-test.md`
+3. Generate comprehensive build and test instructions:
+   - Build instructions for all units
+   - Unit test execution instructions
+   - Integration test instructions (test interactions between units)
+   - Performance test instructions (if applicable)
+   - Additional test instructions as needed (contract tests, security tests, e2e tests)
+4. Create instruction files in build-and-test/ subdirectory: build-instructions.md, unit-test-instructions.md, integration-test-instructions.md, performance-test-instructions.md, build-and-test-summary.md
+5. **Wait for Explicit Approval**: Ask: "**Build and test instructions complete. Ready to proceed to Operations stage?**" - DO NOT PROCEED until user confirms
+6. **MANDATORY**: Log user's response in audit.md with complete raw input
+
+---
+
+# 🟡 OPERATIONS PHASE
+
+**Purpose**: Placeholder for future deployment and monitoring workflows
+
+**Focus**: How to DEPLOY and RUN it (future expansion)
+
+**Stages in OPERATIONS PHASE**:
+- Operations (PLACEHOLDER)
+
+---
+
+## Operations (PLACEHOLDER)
+
+**Status**: This stage is currently a placeholder for future expansion.
+
+The Operations stage will eventually include:
+- Deployment planning and execution
+- Monitoring and observability setup
+- Incident response procedures
+- Maintenance and support workflows
+- Production readiness checklists
+
+**Current State**: All build and test activities are handled in the CONSTRUCTION phase.
+
+## Key Principles
+
+- **Adaptive Execution**: Only execute stages that add value
+- **Transparent Planning**: Always show execution plan before starting
+- **User Control**: User can request stage inclusion/exclusion
+- **Progress Tracking**: Update aidlc-state.md with executed and skipped stages
+- **Complete Audit Trail**: Log ALL user inputs and AI responses in audit.md with timestamps
+  - **CRITICAL**: Capture user's COMPLETE RAW INPUT exactly as provided
+  - **CRITICAL**: Never summarize or paraphrase user input in audit log
+  - **CRITICAL**: Log every interaction, not just approvals
+- **Quality Focus**: Complex changes get full treatment, simple changes stay efficient
+- **Content Validation**: Always validate content before file creation per content-validation.md rules
+- **NO EMERGENT BEHAVIOR**: Construction phases MUST use standardized 2-option completion messages as defined in their respective rule files. DO NOT create 3-option menus or other emergent navigation patterns.
+
+## MANDATORY: Plan-Level Checkbox Enforcement
+
+### MANDATORY RULES FOR PLAN EXECUTION
+1. **NEVER complete any work without updating plan checkboxes**
+2. **IMMEDIATELY after completing ANY step described in a plan file, mark that step [x]**
+3. **This must happen in the SAME interaction where the work is completed**
+4. **NO EXCEPTIONS**: Every plan step completion MUST be tracked with checkbox updates
+
+### Two-Level Checkbox Tracking System
+- **Plan-Level**: Track detailed execution progress within each stage
+- **Stage-Level**: Track overall workflow progress in aidlc-state.md
+- **Update immediately**: All progress updates in SAME interaction where work is completed
+
+## Prompts Logging Requirements
+- **MANDATORY**: Log EVERY user input (prompts, questions, responses) with timestamp in audit.md
+- **MANDATORY**: Capture user's COMPLETE RAW INPUT exactly as provided (never summarize)
+- **MANDATORY**: Log every approval prompt with timestamp before asking the user
+- **MANDATORY**: Record every user response with timestamp after receiving it
+- **CRITICAL**: ALWAYS append changes to EDIT audit.md file, NEVER use tools and commands that completely overwrite its contents
+- **CRITICAL**: Using file writing tools and commands that overwrite contents of the entire audit.md and cause duplication
+- Use ISO 8601 format for timestamps (YYYY-MM-DDTHH:MM:SSZ)
+- Include stage context for each entry
+
+### Audit Log Format:
+```markdown
+## [Stage Name or Interaction Type]
+**Timestamp**: [ISO timestamp]
+**User Input**: "[Complete raw user input - never summarized]"
+**AI Response**: "[AI's response or action taken]"
+**Context**: [Stage, action, or decision made]
+
+---
 ```
-Required before ANY Python command: `pip`, `pytest`, `ui-agent`, `python`. If the environment doesn't exist: `conda create -n ui_agent python=3.11 && conda activate ui_agent`
 
-## Quick Start
+### Correct Tool Usage for audit.md
 
-```bash
-# Install (after activating environment)
-pip install -e ".[dev]"
-playwright install chromium
+✅ CORRECT:
 
-# Run tests
-ui-agent run test_data/sample_test.json --url "https://example.com/form"
-ui-agent validate test_data/demoqa_nl_test.txt --url "https://demoqa.com/form"
-ui-agent analyze "https://example.com/form"
+1. Read the audit.md file
+2. Append/Edit the file to make changes
 
-# Test suite
-pytest                                    # All tests
-pytest tests/test_tools/test_tools.py     # Single file
-pytest tests/test_tools/test_tools.py::TestFillInputTool::test_fill_success  # Single test
+❌ WRONG:
+
+1. Read the audit.md file
+2. Completely overwrite the audit.md with the contents of what you read, plus the new changes you want to add to it
+
+## Directory Structure
+
+```text
+<WORKSPACE-ROOT>/                   # ⚠️ APPLICATION CODE HERE
+├── [project-specific structure]    # Varies by project (see code-generation.md)
+│
+├── aidlc-docs/                     # 📄 DOCUMENTATION ONLY
+│   ├── inception/                  # 🔵 INCEPTION PHASE
+│   │   ├── plans/
+│   │   ├── reverse-engineering/    # Brownfield only
+│   │   ├── requirements/
+│   │   ├── user-stories/
+│   │   └── application-design/
+│   ├── construction/               # 🟢 CONSTRUCTION PHASE
+│   │   ├── plans/
+│   │   ├── {unit-name}/
+│   │   │   ├── functional-design/
+│   │   │   ├── nfr-requirements/
+│   │   │   ├── nfr-design/
+│   │   │   ├── infrastructure-design/
+│   │   │   └── code/               # Markdown summaries only
+│   │   └── build-and-test/
+│   ├── operations/                 # 🟡 OPERATIONS PHASE (placeholder)
+│   ├── aidlc-state.md
+│   └── audit.md
 ```
 
-## Architecture (Multi-Agent System)
-
-**CrewAI Flow** = state machine orchestrating 4 specialized agents per form page:
-
-1. **Page Analyzer** (`src/agents/page_analyzer.py`) — DOM extraction + VLM screenshot analysis → identifies all available fields
-2. **Field Mapper** (`src/agents/field_mapper.py`) — Semantic matching (pure LLM, no tools) → maps test data keys to actual form fields
-3. **Form Filler** (`src/agents/form_filler.py`) — Executes Playwright actions (fill, select, click) → completes form fields
-4. **Result Verifier** (`src/agents/result_verifier.py`) — Post-submit verification → confirms success/failure
-
-**Flow Entry Point**: `src/flow/form_test_flow.py` (CrewAI Flow with `@start`, `@listen`, `@router` decorators)
-- Handles multi-step forms (next page detection)
-- Manages state across pages (`FormTestState`)
-- Drives agent cooperation via `src/flow/page_crew.py`
-
-## Code Patterns
-
-### Tool Structure (Self-Healing Pattern)
-Every browser tool in `src/tools/` follows this template:
-```python
-class FooInput(BaseModel):
-    selector: str = Field(..., description="CSS selector")
-    value: str
-
-class FooTool(BaseTool):
-    name: str = "Human Readable Name"
-    description: str = "What this tool does"
-    args_schema: type[BaseModel] = FooInput
-    page: Any = None  # Playwright Page
-    model_config = {"arbitrary_types_allowed": True}
-
-    def _run(self, selector: str, value: str) -> str:
-        try:
-            # Primary strategy (e.g., .fill())
-            return "SUCCESS: ..."
-        except Exception:
-            try:
-                # Self-healing fallback (e.g., .press_sequentially())
-                return "HEALED: ..."
-            except Exception as e:
-                return "FAILED: ..."  # Never raise
-```
-**Critical**: Tools return status strings (`SUCCESS`/`HEALED`/`FAILED`) — never raise exceptions. Popup dismissal via `.press("Escape")` after fill/checkbox actions prevents blocking overlays.
-
-### Natural Language Test Parsing (Two-Stage)
-`.txt` files require special handling:
-1. **Stage 1** (`pre_analyze_page()`) — Open browser → extract DOM fields → build `page_context`
-2. **Stage 2** (`src/parsers/nl_parser.py`) — LLM maps NL description to actual form fields using `page_context`
-
-**Flow routing**: `@router(parse_test_case)` returns `"pre_analyze"` for `.txt` files, triggering DOM extraction before parsing. Direct method calls bypass Flow events, so NL path uses manual loop (`_run_page_loop()`).
-
-### Type Annotations & Imports
-- **Always** start with `from __future__ import annotations` (enables `X | None` syntax)
-- Use lowercase generics: `dict[str, str]`, `list[TestCase]` (Python 3.11+)
-- Absolute imports: `from src.models import TestCase` (not relative, except within `src/parsers/`)
-- Function returns always typed: `def foo(x: str) -> str:`
-- Playwright `Page` typed as `Any` in tools (with `arbitrary_types_allowed`)
-
-### Testing with Mocks
-Browser tools tested with `unittest.mock.MagicMock` — no real browser needed:
-```python
-@pytest.fixture
-def mock_page():
-    page = MagicMock()
-    page.locator.return_value = MagicMock()  # Mock the locator chain
-    return page
-
-def test_fill(mock_page):
-    tool = FillInputTool(page=mock_page)
-    result = tool._run("#name", "John")
-    assert "SUCCESS" in result
-```
-Check `tests/test_tools/test_tools.py` for examples. Use `tmp_path` (pytest built-in) for file-based tests.
-
-## Configuration
-
-All config via `.env` → loaded by `src/config.py:Settings` (Pydantic):
-```bash
-OPENAI_API_KEY=sk-...
-OPENAI_API_BASE=https://api.openai.com/v1  # Optional proxy
-LLM_MODEL=gpt-5.2
-VLM_MODEL=gpt-5.2  # Vision model for screenshots
-BROWSER_HEADLESS=false  # Set true for CI
-BROWSER_PROXY=http://proxy:8080  # Optional
-```
-Access via `get_settings()` factory function (not direct instantiation).
-
-## File Naming & Style
-
-- **Files**: `snake_case.py` (e.g., `form_test_flow.py`, `dom_extractor_tool.py`)
-- **Classes**: `PascalCase` (e.g., `FormTestFlow`, `FillInputTool`, `BrowserManager`)
-- **Functions**: `snake_case` (e.g., `parse_test_file`, `create_page_analyzer`)
-- **Agent factory**: `create_<role>(page, llm, settings=None) -> Agent` pattern
-- **Tool classes**: `<Action>Tool` + `<Action>Input` schema class
-- **Formatting**: 4-space indent, ~88 char lines (Black-compatible), double quotes, trailing commas
-
-## Known Issues & Quirks
-
-- **Only first test case executes** per run (`form_test_flow.py:75` — loop needed)
-- **Type mismatch**: `PageResult.validation_errors` defined as `list[dict]` but flow stores `list[str]` — align types when fixing
-- **CrewAI Flow caveat**: Direct method calls (`self.foo()`) bypass `@listen`/`@router` event system — only Flow scheduler triggers listeners
-- **Natural language parsing requires URL**: `--url` mandatory for `.txt` files (both `run` + `validate` commands) to extract page context
-
-## Project Structure Quick Reference
-
-```
-src/
-  main.py                  # CLI entry (Click commands: run/validate/analyze)
-  config.py                # Pydantic Settings (.env loader)
-  agents/                  # 4 CrewAI agents (analyzer/mapper/filler/verifier)
-  browser/browser_manager.py  # Playwright lifecycle wrapper
-  flow/
-    form_test_flow.py      # CrewAI Flow state machine (main orchestrator)
-    page_crew.py           # Builds 4-agent Crew per page
-  models/                  # Pydantic data models (TestCase, PageResult, TestReport)
-  parsers/                 # Test file parsers (JSON/YAML/CSV/Excel/NL)
-  tools/                   # CrewAI Tools wrapping Playwright actions
-  reporting/               # JSON + HTML report generators (Jinja2 templates)
-tests/                     # pytest suite (mirrors src/ structure)
-templates/report.html      # HTML report template
-test_data/                 # Sample test cases (JSON/YAML/CSV/TXT)
-```
-
-**Key insight**: Understanding CrewAI Flow's event-driven model (`@start`/`@listen`/`@router`) is essential — it's not a linear function chain. Read `src/flow/form_test_flow.py` first when debugging flow logic.
-
-See `AGENTS.md` for deeper implementation details and coding patterns.
+**CRITICAL RULE**:
+- Application code: Workspace root (NEVER in aidlc-docs/)
+- Documentation: aidlc-docs/ only
+- Project structure: See code-generation.md for patterns by project type
