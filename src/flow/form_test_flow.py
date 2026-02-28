@@ -53,7 +53,8 @@ class FormTestState(BaseModel):
     validation_errors: list[str] = []
 
     # Final result
-    overall_status: str = ""  # PASS / FAIL / PARTIAL
+    overall_status: str = ""  # PASS / PASS_WITH_RETRIES / PARTIAL / FAIL / ERROR
+    error_message: str = ""
     screenshots: list[str] = []
     start_time: float = 0.0
 
@@ -166,29 +167,36 @@ class FormTestFlow(Flow[FormTestState]):
         the CrewAI Flow event system which does not support re-entrant
         method calls from @listen handlers.
         """
-        while True:
-            result = self.process_page()  # noqa: arg-type
-
-            # Decide next step (mirrors decide_next_step logic)
-            if self.state.verification_passed:
-                if self.state.current_page_id == "completion":
-                    logger.info("Form completed successfully")
-                    break
-                logger.info("Page passed, advancing to next page")
+        try:
+            while True:
+                result = self.process_page()  # noqa: arg-type
+                # current_page_index was recorded in _update_state_from_crew_result;
+                # increment now so each page_result gets a unique sequential index.
                 self.state.current_page_index += 1
-                self.state.retry_count = 0
-                self.state.validation_errors = []
-                continue
-            elif self.state.retry_count < self.state.max_retries:
-                logger.info(
-                    f"Verification failed, retrying "
-                    f"({self.state.retry_count + 1}/{self.state.max_retries})"
-                )
-                self.state.retry_count += 1
-                continue
-            else:
-                logger.warning("Max retries exceeded, completing with errors")
-                break
+
+                # Decide next step (mirrors decide_next_step logic)
+                if self.state.verification_passed:
+                    if self.state.current_page_id == "completion":
+                        logger.info("Form completed successfully")
+                        break
+                    logger.info("Page passed, advancing to next page")
+                    self.state.retry_count = 0
+                    self.state.validation_errors = []
+                    continue
+                elif self.state.retry_count < self.state.max_retries:
+                    logger.info(
+                        f"Verification failed, retrying "
+                        f"({self.state.retry_count + 1}/{self.state.max_retries})"
+                    )
+                    self.state.retry_count += 1
+                    continue
+                else:
+                    logger.warning("Max retries exceeded, completing with errors")
+                    break
+        except Exception as e:
+            logger.error(f"Fatal error during page processing: {e}", exc_info=True)
+            self.state.overall_status = "ERROR"
+            self.state.error_message = str(e)
 
         return self.generate_report()
 
@@ -323,6 +331,7 @@ class FormTestFlow(Flow[FormTestState]):
             else:
                 self.state.verification_passed = True
             field_results = []
+            screenshot = ""
 
         # Record page result
         self.state.page_results.append(
@@ -333,6 +342,9 @@ class FormTestFlow(Flow[FormTestState]):
                 "validation_errors": self.state.validation_errors,
                 "retry_count": self.state.retry_count,
                 "field_results": field_results,
+                "screenshot_path": screenshot
+                if screenshot
+                else (self.state.screenshots[-1] if self.state.screenshots else ""),
                 "duration_seconds": page_duration,
                 "task_durations": task_durations or {},
                 "token_usage": token_usage or {},
@@ -370,14 +382,30 @@ class FormTestFlow(Flow[FormTestState]):
         duration = time.time() - self.state.start_time
 
         # Determine overall status
-        if not self.state.page_results:
+        if self.state.overall_status == "ERROR":
+            pass  # Keep ERROR status set by exception handler
+        elif not self.state.page_results:
             self.state.overall_status = "FAIL"
-        elif all(p.get("verification_passed") for p in self.state.page_results):
-            self.state.overall_status = "PASS"
-        elif any(p.get("verification_passed") for p in self.state.page_results):
-            self.state.overall_status = "PARTIAL"
         else:
-            self.state.overall_status = "FAIL"
+            reached_completion = any(
+                p.get("page_id") == "completion" and p.get("verification_passed")
+                for p in self.state.page_results
+            )
+            has_retries = any(
+                p.get("retry_count", 0) > 0 for p in self.state.page_results
+            )
+            any_passed = any(
+                p.get("verification_passed") for p in self.state.page_results
+            )
+
+            if reached_completion and not has_retries:
+                self.state.overall_status = "PASS"
+            elif reached_completion and has_retries:
+                self.state.overall_status = "PASS_WITH_RETRIES"
+            elif any_passed:
+                self.state.overall_status = "PARTIAL"
+            else:
+                self.state.overall_status = "FAIL"
 
         pages = []
         for pr in self.state.page_results:
@@ -403,6 +431,7 @@ class FormTestFlow(Flow[FormTestState]):
                     verification_passed=pr.get("verification_passed", False),
                     validation_errors=pr.get("validation_errors", []),
                     retry_count=pr.get("retry_count", 0),
+                    screenshot_path=pr.get("screenshot_path", ""),
                     duration_seconds=pr.get("duration_seconds", 0.0),
                     task_durations=pr.get("task_durations", {}),
                     token_usage=pr.get("token_usage", {}),
@@ -427,7 +456,7 @@ class FormTestFlow(Flow[FormTestState]):
             test_case_id=self.state.test_case_id,
             url=self.state.target_url,
             overall_status=self.state.overall_status,
-            total_pages=self.state.current_page_index + 1,
+            total_pages=len(self.state.page_results),
             pages_completed=sum(1 for p in pages if p.verification_passed),
             pages=pages,
             screenshots=self.state.screenshots,
@@ -440,6 +469,7 @@ class FormTestFlow(Flow[FormTestState]):
             total_tokens=total_tokens,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
+            error_message=self.state.error_message,
         )
 
         # Save reports

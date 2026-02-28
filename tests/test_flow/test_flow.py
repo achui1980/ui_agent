@@ -244,7 +244,7 @@ class TestRunPageLoop:
         flow.generate_report = lambda: {
             "overall_status": flow.state.overall_status or "PASS",
             "pages": flow.state.page_results,
-            "total_pages": flow.state.current_page_index + 1,
+            "total_pages": len(flow.state.page_results),
         }
 
         return flow
@@ -263,7 +263,8 @@ class TestRunPageLoop:
 
         report = flow._run_page_loop()
 
-        assert flow.state.current_page_index == 0
+        # page_index increments after each process_page, so 0 -> 1
+        assert flow.state.current_page_index == 1
         assert flow.state.current_page_id == "completion"
         assert len(flow.state.page_results) == 1
         assert flow.state.consumed_fields == ["f1", "f2", "f3"]
@@ -292,7 +293,8 @@ class TestRunPageLoop:
 
         report = flow._run_page_loop()
 
-        assert flow.state.current_page_index == 2
+        # page_index increments after each process_page: 0->1->2->3
+        assert flow.state.current_page_index == 3
         assert flow.state.current_page_id == "completion"
         assert len(flow.state.page_results) == 3
         assert flow.state.consumed_fields == ["f1", "f2", "f3"]
@@ -318,6 +320,8 @@ class TestRunPageLoop:
         assert flow.state.retry_count == 1
         assert flow.state.current_page_id == "completion"
         assert len(flow.state.page_results) == 2
+        # page_index increments after each call: 0->1->2
+        assert flow.state.current_page_index == 2
 
     def test_max_retries_exceeded(self):
         """Page fails all retries, loop exits with errors."""
@@ -336,6 +340,8 @@ class TestRunPageLoop:
         assert flow.state.retry_count == 3
         assert flow.state.verification_passed is False
         assert len(flow.state.page_results) == 4
+        # page_index increments after each call: 0->1->2->3->4
+        assert flow.state.current_page_index == 4
 
     def test_multi_page_with_retry_on_second_page(self):
         """Page 1 passes, page 2 fails once then passes, page 3 is final."""
@@ -369,7 +375,8 @@ class TestRunPageLoop:
 
         report = flow._run_page_loop()
 
-        assert flow.state.current_page_index == 2
+        # page_index increments after each call: 0->1->2->3->4
+        assert flow.state.current_page_index == 4
         assert flow.state.current_page_id == "completion"
         assert flow.state.consumed_fields == ["f1", "f2", "f3"]
         # 4 total process_page calls: page1 + page2_fail + page2_retry + page3
@@ -399,7 +406,8 @@ class TestRunPageLoop:
 
         # After advancing to page 2, retry_count should have been reset
         assert flow.state.retry_count == 0
-        assert flow.state.current_page_index == 1
+        # page_index increments after each call: 0->1->2->3
+        assert flow.state.current_page_index == 3
 
     def test_max_pages_safety_limit(self):
         """Loop should exit when max_pages is reached."""
@@ -427,8 +435,10 @@ class TestRunPageLoop:
 
         report = flow._run_page_loop()
 
-        # Should have processed exactly max_pages pages before hitting limit
-        assert flow.state.current_page_index == 3
+        # Should have processed exactly max_pages pages before hitting limit.
+        # page_index increments after each process_page call:
+        # 3 real pages + 1 call that hits the limit = 4 increments
+        assert flow.state.current_page_index == 4
         assert flow.state.overall_status == "PARTIAL"
 
     def test_consumed_fields_accumulate_across_pages(self):
@@ -509,7 +519,8 @@ class TestRunPageLoop:
 
 
 class TestGenerateReport:
-    def test_all_pages_pass(self):
+    def test_all_pages_pass_reaching_completion(self):
+        """All pages pass on first try and reach completion -> PASS."""
         flow = _make_flow(
             test_case_id="TC_REPORT",
             target_url="http://example.com",
@@ -523,13 +534,13 @@ class TestGenerateReport:
                 },
                 {
                     "page_index": 1,
-                    "page_id": "p2",
+                    "page_id": "completion",
                     "verification_passed": True,
                     "validation_errors": [],
                     "retry_count": 0,
                 },
             ],
-            current_page_index=1,
+            current_page_index=2,
         )
 
         with (
@@ -546,7 +557,51 @@ class TestGenerateReport:
         assert result["pages_completed"] == 2
         assert result["total_pages"] == 2
 
+    def test_pass_with_retries(self):
+        """Reach completion but with retries -> PASS_WITH_RETRIES."""
+        flow = _make_flow(
+            test_case_id="TC_RETRIES",
+            target_url="http://example.com",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "p1",
+                    "verification_passed": False,
+                    "validation_errors": ["err"],
+                    "retry_count": 0,
+                },
+                {
+                    "page_index": 1,
+                    "page_id": "p1",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 1,
+                },
+                {
+                    "page_index": 2,
+                    "page_id": "completion",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                },
+            ],
+            current_page_index=3,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert result["overall_status"] == "PASS_WITH_RETRIES"
+
     def test_partial_pass(self):
+        """Some pages pass but didn't reach completion -> PARTIAL."""
         flow = _make_flow(
             test_case_id="TC_PARTIAL",
             target_url="http://example.com",
@@ -566,7 +621,7 @@ class TestGenerateReport:
                     "retry_count": 3,
                 },
             ],
-            current_page_index=1,
+            current_page_index=2,
         )
 
         with (
@@ -595,7 +650,7 @@ class TestGenerateReport:
                     "retry_count": 3,
                 },
             ],
-            current_page_index=0,
+            current_page_index=1,
         )
 
         with (
@@ -633,7 +688,7 @@ class TestGenerateReport:
                     ],
                 },
             ],
-            current_page_index=0,
+            current_page_index=1,
         )
 
         with (
@@ -728,3 +783,457 @@ class TestMultipleTestCases:
         assert len(cases) == 2
         assert cases[0].test_id == "TC1"
         assert cases[1].test_id == "TC2"
+
+
+# ---------------------------------------------------------------------------
+# FR-02: Error recovery tests
+# ---------------------------------------------------------------------------
+
+
+class TestErrorRecovery:
+    """Test that fatal errors during page processing produce ERROR reports."""
+
+    def test_process_page_exception_produces_error_report(self):
+        """When process_page raises, _run_page_loop catches it and generates a report."""
+        flow = _make_flow(
+            test_case_id="TC_ERROR",
+            target_url="http://example.com",
+            test_case_data={"f1": "v1"},
+        )
+
+        def exploding_process_page():
+            raise RuntimeError("Browser crashed unexpectedly")
+
+        flow.process_page = exploding_process_page
+
+        # Mock generate_report to avoid file/browser dependencies
+        captured = {}
+
+        def mock_generate_report():
+            captured["status"] = flow.state.overall_status
+            captured["error_message"] = flow.state.error_message
+            captured["page_results"] = list(flow.state.page_results)
+            return {
+                "overall_status": flow.state.overall_status,
+                "error_message": flow.state.error_message,
+                "pages": flow.state.page_results,
+            }
+
+        flow.generate_report = mock_generate_report
+
+        report = flow._run_page_loop()
+
+        assert report["overall_status"] == "ERROR"
+        assert "Browser crashed unexpectedly" in report["error_message"]
+
+    def test_error_preserves_partial_results(self):
+        """If some pages succeed before an error, partial results are kept."""
+        flow = _make_flow(
+            test_case_id="TC_PARTIAL_ERROR",
+            target_url="http://example.com",
+            test_case_data={"f1": "v1", "f2": "v2"},
+        )
+
+        call_count = {"n": 0}
+
+        def process_then_explode():
+            idx = call_count["n"]
+            call_count["n"] += 1
+            if idx == 0:
+                # First call succeeds
+                crew_result = _crew_result_json(
+                    passed=True,
+                    new_page_id="step_1",
+                    consumed_keys=["f1"],
+                )
+                flow._update_state_from_crew_result(crew_result)
+                return "crew_done"
+            else:
+                raise RuntimeError("Network timeout")
+
+        flow.process_page = process_then_explode
+
+        def mock_generate_report():
+            return {
+                "overall_status": flow.state.overall_status,
+                "error_message": flow.state.error_message,
+                "pages": list(flow.state.page_results),
+            }
+
+        flow.generate_report = mock_generate_report
+
+        report = flow._run_page_loop()
+
+        assert report["overall_status"] == "ERROR"
+        assert "Network timeout" in report["error_message"]
+        # The first page result should still be present
+        assert len(report["pages"]) == 1
+        assert report["pages"][0]["verification_passed"] is True
+
+    def test_error_status_preserved_in_generate_report(self):
+        """generate_report should not overwrite ERROR status."""
+        flow = _make_flow(
+            test_case_id="TC_ERROR_REPORT",
+            target_url="http://example.com",
+            overall_status="ERROR",
+            error_message="Something broke",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "p1",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                },
+            ],
+            current_page_index=1,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert result["overall_status"] == "ERROR"
+        assert result["error_message"] == "Something broke"
+
+
+# ---------------------------------------------------------------------------
+# FR-03: Four-level status tests
+# ---------------------------------------------------------------------------
+
+
+class TestFourLevelStatus:
+    """Test the PASS / PASS_WITH_RETRIES / PARTIAL / FAIL status logic."""
+
+    def test_pass_all_first_try_with_completion(self):
+        """All pages pass on first try and reach completion -> PASS."""
+        flow = _make_flow(
+            test_case_id="TC_PASS",
+            target_url="http://example.com",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "p1",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                },
+                {
+                    "page_index": 1,
+                    "page_id": "completion",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                },
+            ],
+            current_page_index=2,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert result["overall_status"] == "PASS"
+
+    def test_pass_with_retries(self):
+        """Reach completion but some pages had retries -> PASS_WITH_RETRIES."""
+        flow = _make_flow(
+            test_case_id="TC_PWR",
+            target_url="http://example.com",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "p1",
+                    "verification_passed": False,
+                    "validation_errors": ["err"],
+                    "retry_count": 0,
+                },
+                {
+                    "page_index": 1,
+                    "page_id": "p1",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 1,
+                },
+                {
+                    "page_index": 2,
+                    "page_id": "completion",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                },
+            ],
+            current_page_index=3,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert result["overall_status"] == "PASS_WITH_RETRIES"
+
+    def test_partial_no_completion(self):
+        """Some pages passed but didn't reach completion -> PARTIAL."""
+        flow = _make_flow(
+            test_case_id="TC_PARTIAL",
+            target_url="http://example.com",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "p1",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                },
+                {
+                    "page_index": 1,
+                    "page_id": "p2",
+                    "verification_passed": False,
+                    "validation_errors": ["failed"],
+                    "retry_count": 3,
+                },
+            ],
+            current_page_index=2,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert result["overall_status"] == "PARTIAL"
+
+    def test_fail_no_pages_passed(self):
+        """No pages passed -> FAIL."""
+        flow = _make_flow(
+            test_case_id="TC_FAIL",
+            target_url="http://example.com",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "p1",
+                    "verification_passed": False,
+                    "validation_errors": ["err"],
+                    "retry_count": 3,
+                },
+            ],
+            current_page_index=1,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert result["overall_status"] == "FAIL"
+
+    def test_fail_no_results(self):
+        """No page results at all -> FAIL."""
+        flow = _make_flow(
+            test_case_id="TC_EMPTY",
+            target_url="http://example.com",
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert result["overall_status"] == "FAIL"
+
+
+# ---------------------------------------------------------------------------
+# FR-04: screenshot_path population tests
+# ---------------------------------------------------------------------------
+
+
+class TestScreenshotPath:
+    """Test that screenshot_path is populated in page_results."""
+
+    def test_screenshot_path_from_crew_result(self):
+        """screenshot_path from crew result should appear in page_result."""
+        flow = _make_flow()
+        result = _crew_result_json(
+            passed=True,
+            is_final_page=True,
+            screenshot_path="/tmp/page_shot.png",
+        )
+        flow._update_state_from_crew_result(result)
+
+        assert flow.state.page_results[0]["screenshot_path"] == "/tmp/page_shot.png"
+
+    def test_screenshot_path_falls_back_to_latest(self):
+        """When crew result has no screenshot, use latest from state.screenshots."""
+        flow = _make_flow(screenshots=["/tmp/earlier.png"])
+        result = _crew_result_json(
+            passed=True,
+            is_final_page=True,
+            screenshot_path="",
+        )
+        flow._update_state_from_crew_result(result)
+
+        assert flow.state.page_results[0]["screenshot_path"] == "/tmp/earlier.png"
+
+    def test_screenshot_path_empty_when_none_available(self):
+        """When no screenshots at all, screenshot_path should be empty."""
+        flow = _make_flow()
+        result = _crew_result_json(
+            passed=True,
+            is_final_page=True,
+            screenshot_path="",
+        )
+        flow._update_state_from_crew_result(result)
+
+        assert flow.state.page_results[0]["screenshot_path"] == ""
+
+    def test_screenshot_path_in_generated_report(self):
+        """screenshot_path should propagate through to the generated report."""
+        flow = _make_flow(
+            test_case_id="TC_SS",
+            target_url="http://example.com",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "completion",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                    "screenshot_path": "/tmp/final.png",
+                },
+            ],
+            current_page_index=1,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert result["pages"][0]["screenshot_path"] == "/tmp/final.png"
+
+
+# ---------------------------------------------------------------------------
+# FR-05: page_index increment tests
+# ---------------------------------------------------------------------------
+
+
+class TestPageIndexIncrement:
+    """Test that page_index increments after every process_page call."""
+
+    def test_page_index_sequential_across_retries(self):
+        """Each page_result should have a unique sequential page_index."""
+        flow = _make_flow(
+            test_case_id="TC_IDX",
+            target_url="http://example.com",
+            test_case_data={"f1": "v1"},
+        )
+
+        call_count = {"n": 0}
+
+        def mock_process_page():
+            idx = call_count["n"]
+            call_count["n"] += 1
+            pages = [
+                {"passed": False, "validation_errors": ["err"]},
+                {"passed": True, "is_final_page": True, "consumed_keys": ["f1"]},
+            ]
+            if idx < len(pages):
+                crew_result = _crew_result_json(**pages[idx])
+                flow._update_state_from_crew_result(crew_result)
+            return "crew_done"
+
+        flow.process_page = mock_process_page
+        flow.generate_report = lambda: {
+            "pages": flow.state.page_results,
+        }
+
+        report = flow._run_page_loop()
+
+        # First call uses index 0, second call uses index 1
+        assert report["pages"][0]["page_index"] == 0
+        assert report["pages"][1]["page_index"] == 1
+        # After two calls, current_page_index should be 2
+        assert flow.state.current_page_index == 2
+
+    def test_total_pages_matches_page_results_count(self):
+        """total_pages in report should equal len(page_results)."""
+        flow = _make_flow(
+            test_case_id="TC_TOTAL",
+            target_url="http://example.com",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "p1",
+                    "verification_passed": False,
+                    "validation_errors": ["err"],
+                    "retry_count": 0,
+                },
+                {
+                    "page_index": 1,
+                    "page_id": "p1",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 1,
+                },
+                {
+                    "page_index": 2,
+                    "page_id": "completion",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                },
+            ],
+            current_page_index=3,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert (
+            result["total_pages"] == 3
+        )  # len(page_results), not current_page_index + 1

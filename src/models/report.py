@@ -8,7 +8,7 @@ from .page_result import PageResult
 class TestReport(BaseModel):
     test_case_id: str
     url: str
-    overall_status: str  # PASS / FAIL / PARTIAL
+    overall_status: str  # PASS / PASS_WITH_RETRIES / PARTIAL / FAIL / ERROR
     total_pages: int
     pages_completed: int
     pages: list[PageResult]
@@ -19,3 +19,4 @@ class TestReport(BaseModel):
     total_tokens: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    error_message: str = ""
