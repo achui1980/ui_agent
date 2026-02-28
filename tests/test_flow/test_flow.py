@@ -165,6 +165,34 @@ class TestUpdateStateFromCrewResult:
 
         assert flow.state.page_results[0]["retry_count"] == 2
 
+    def test_field_results_parsed(self):
+        flow = _make_flow()
+        result = _crew_result_json(
+            passed=True,
+            is_final_page=True,
+            consumed_keys=["first_name", "email"],
+        )
+        data = json.loads(result)
+        data["field_results"] = [
+            {
+                "field_id": "first_name",
+                "selector": "#firstName",
+                "value": "John",
+                "status": "success",
+            },
+            {
+                "field_id": "email",
+                "selector": "#email",
+                "value": "john@test.com",
+                "status": "healed",
+                "error_message": "Used JS fill",
+            },
+        ]
+        flow._update_state_from_crew_result(json.dumps(data))
+        assert len(flow.state.page_results) == 1
+        assert "field_results" in flow.state.page_results[0]
+        assert len(flow.state.page_results[0]["field_results"]) == 2
+
 
 # ---------------------------------------------------------------------------
 # _run_page_loop tests (multi-page scenarios)
@@ -577,6 +605,46 @@ class TestGenerateReport:
 
         assert result["overall_status"] == "FAIL"
         assert result["pages_completed"] == 0
+
+    def test_fields_filled_populated(self):
+        flow = _make_flow(
+            test_case_id="TC_FIELDS",
+            target_url="http://example.com",
+            page_results=[
+                {
+                    "page_index": 0,
+                    "page_id": "p1",
+                    "verification_passed": True,
+                    "validation_errors": [],
+                    "retry_count": 0,
+                    "field_results": [
+                        {
+                            "field_id": "name",
+                            "selector": "#name",
+                            "value": "John",
+                            "status": "success",
+                            "error_message": "",
+                        },
+                    ],
+                },
+            ],
+            current_page_index=0,
+        )
+
+        with (
+            patch(
+                "src.flow.form_test_flow.save_json_report", return_value="/tmp/r.json"
+            ),
+            patch(
+                "src.flow.form_test_flow.save_html_report", return_value="/tmp/r.html"
+            ),
+        ):
+            result = flow.generate_report()
+
+        assert len(result["pages"]) == 1
+        page = result["pages"][0]
+        assert len(page["fields_filled"]) == 1
+        assert page["fields_filled"][0]["field_id"] == "name"
 
     def test_no_page_results(self):
         flow = _make_flow(

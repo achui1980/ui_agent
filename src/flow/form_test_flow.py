@@ -300,6 +300,8 @@ class FormTestFlow(Flow[FormTestState]):
             if is_final:
                 self.state.current_page_id = "completion"
 
+            field_results = parsed.get("field_results", [])
+
         except Exception as e:
             logger.warning(f"Could not parse crew result as JSON: {e}")
             # Heuristic: if no errors mentioned, assume passed
@@ -309,6 +311,7 @@ class FormTestFlow(Flow[FormTestState]):
                 self.state.validation_errors = ["Could not parse verification result"]
             else:
                 self.state.verification_passed = True
+            field_results = []
 
         # Record page result
         self.state.page_results.append(
@@ -318,6 +321,7 @@ class FormTestFlow(Flow[FormTestState]):
                 "verification_passed": self.state.verification_passed,
                 "validation_errors": self.state.validation_errors,
                 "retry_count": self.state.retry_count,
+                "field_results": field_results,
                 "duration_seconds": page_duration,
                 "task_durations": task_durations or {},
                 "token_usage": token_usage or {},
@@ -366,11 +370,25 @@ class FormTestFlow(Flow[FormTestState]):
 
         pages = []
         for pr in self.state.page_results:
+            field_results = []
+            for fr in pr.get("field_results", []):
+                try:
+                    field_results.append(
+                        FieldActionResult(
+                            field_id=fr.get("field_id", ""),
+                            selector=fr.get("selector", ""),
+                            value=fr.get("value", ""),
+                            status=fr.get("status", ""),
+                            error_message=fr.get("error_message", ""),
+                        )
+                    )
+                except Exception:
+                    pass
             pages.append(
                 PageResult(
                     page_index=pr.get("page_index", 0),
                     page_id=pr.get("page_id", "unknown"),
-                    fields_filled=[],  # Detailed results from crew
+                    fields_filled=field_results,
                     verification_passed=pr.get("verification_passed", False),
                     validation_errors=pr.get("validation_errors", []),
                     retry_count=pr.get("retry_count", 0),
