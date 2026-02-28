@@ -1,9 +1,9 @@
 """Tests for test case parsers."""
+
 from __future__ import annotations
 
 import json
 import os
-import tempfile
 
 import pytest
 
@@ -15,10 +15,12 @@ from src.parsers.parser_factory import parse_test_file
 
 class TestJsonParser:
     def test_parse_structured_json(self, tmp_path):
-        data = [{
-            "test_id": "TC1",
-            "data": {"first_name": "John", "last_name": "Smith"},
-        }]
+        data = [
+            {
+                "test_id": "TC1",
+                "data": {"first_name": "John", "last_name": "Smith"},
+            }
+        ]
         path = tmp_path / "test.json"
         path.write_text(json.dumps(data))
 

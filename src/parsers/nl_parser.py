@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from crewai import LLM
 from loguru import logger
@@ -34,8 +35,6 @@ def _build_field_description(fields: list[dict]) -> str:
             clean_id = field_id.replace("Input", "").replace("input", "")
             clean_id = clean_id.replace("react-select-", "dropdown-")
             # camelCase to spaces
-            import re
-
             name = re.sub(r"([a-z])([A-Z])", r"\1 \2", clean_id)
             name = name.replace("-", " ").replace("_", " ").strip()
             if group:

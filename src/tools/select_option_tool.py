@@ -150,38 +150,6 @@ class SelectOptionTool(BaseTool):
             except Exception:
                 return ""
 
-        try:
-            # Click the container area to open the dropdown
-            container = input_locator.locator("..")
-            container.click()
-            self.page.wait_for_timeout(300)
-
-            # Type search text to filter options
-            input_locator.fill(text)
-            self.page.wait_for_timeout(500)
-
-            # Find and click the matching option
-            option = self.page.locator(f"[class*='option']:has-text('{text}')").first
-            if option.is_visible():
-                option.click()
-                self.page.wait_for_timeout(300)
-                return f"SUCCESS: react-select '{text}' in '{selector}'"
-
-            # Fallback: press Enter to select first filtered option
-            input_locator.press("Enter")
-            self.page.wait_for_timeout(300)
-            return f"HEALED: react-select Enter-confirmed '{text}' in '{selector}'"
-        except Exception:
-            # Last resort: type + Enter
-            try:
-                input_locator.fill(text)
-                self.page.wait_for_timeout(500)
-                input_locator.press("Enter")
-                self.page.wait_for_timeout(300)
-                return f"HEALED: react-select typed+Enter '{text}' in '{selector}'"
-            except Exception:
-                return ""
-
     def _select_generic(self, selector: str, text: str) -> str:
         """Handle generic custom dropdown (click to open, click option)."""
         try:
