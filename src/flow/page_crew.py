@@ -22,7 +22,7 @@ def build_page_crew(page: Page, settings: Settings) -> Crew:
     page_analyzer = create_page_analyzer(page, llm, settings)
     field_mapper = create_field_mapper(llm)
     form_filler = create_form_filler(page, llm)
-    result_verifier = create_result_verifier(page, llm)
+    result_verifier = create_result_verifier(page, llm, settings)
 
     # Tasks (sequential with context chaining)
     analyze_task = Task(

@@ -39,6 +39,7 @@ class ScreenshotAnalysisTool(BaseTool):
     vlm_api_key: str = ""
     vlm_api_base: str = ""
     vlm_max_tokens: int = 1000
+    screenshot_dir: str = "reports/screenshots"
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -52,8 +53,8 @@ class ScreenshotAnalysisTool(BaseTool):
 
         # Step 1: Take screenshot and encode as base64
         try:
-            os.makedirs("reports/screenshots", exist_ok=True)
-            save_path = f"reports/screenshots/analysis_{int(time.time())}.png"
+            os.makedirs(self.screenshot_dir, exist_ok=True)
+            save_path = f"{self.screenshot_dir}/analysis_{int(time.time())}.png"
             self.page.screenshot(path=save_path, full_page=True)
             logger.info(f"Screenshot saved for analysis: {save_path}")
 

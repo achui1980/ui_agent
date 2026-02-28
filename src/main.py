@@ -159,7 +159,9 @@ def analyze(url: str, visual: bool) -> None:
         click.echo("=== DOM Extraction ===")
         click.echo(json.dumps(parsed, indent=2, ensure_ascii=False))
 
-        screenshot = ScreenshotTool(page=page)
+        screenshot = ScreenshotTool(
+            page=page, screenshot_dir=settings.awa_screenshot_dir
+        )
         ss_result = screenshot._run()
         click.echo(f"\n{ss_result}")
 
@@ -171,6 +173,7 @@ def analyze(url: str, visual: bool) -> None:
                 vlm_api_key=settings.openai_api_key,
                 vlm_api_base=settings.openai_api_base,
                 vlm_max_tokens=settings.vlm_max_tokens,
+                screenshot_dir=settings.awa_screenshot_dir,
             )
             analysis = analyzer._run()
             click.echo(analysis)

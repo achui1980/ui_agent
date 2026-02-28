@@ -62,7 +62,12 @@ class TestExtractJson:
 
 def _make_flow(settings=None, **state_kwargs) -> FormTestFlow:
     """Create a FormTestFlow with mock settings and pre-populated state."""
-    mock_settings = settings or MagicMock()
+    if settings is None:
+        mock_settings = MagicMock()
+        mock_settings.awa_max_steps = 50
+        mock_settings.awa_max_healing_attempts = 3
+    else:
+        mock_settings = settings
     flow = FormTestFlow(settings=mock_settings)
     # Manually set state fields
     for k, v in state_kwargs.items():
@@ -668,6 +673,41 @@ class TestGenerateReport:
 # ---------------------------------------------------------------------------
 # Multiple test case execution
 # ---------------------------------------------------------------------------
+
+
+class TestConfigConnection:
+    """Test that config fields are connected to runtime behavior."""
+
+    def test_max_pages_from_settings(self):
+        settings = MagicMock()
+        settings.awa_max_steps = 10
+        settings.awa_max_healing_attempts = 5
+        flow = FormTestFlow(settings=settings)
+        assert flow.state.max_pages == 10
+        assert flow.state.max_retries == 5
+
+    def test_default_settings_values(self):
+        """Flow should use real Settings defaults when no mock is provided."""
+        with patch("src.flow.form_test_flow.get_settings") as mock_get:
+            mock_settings = MagicMock()
+            mock_settings.awa_max_steps = 50
+            mock_settings.awa_max_healing_attempts = 3
+            mock_get.return_value = mock_settings
+            flow = FormTestFlow()
+            assert flow.state.max_pages == 50
+            assert flow.state.max_retries == 3
+
+    def test_cli_overrides_config(self):
+        """CLI args should override config when set after __init__."""
+        settings = MagicMock()
+        settings.awa_max_steps = 10
+        settings.awa_max_healing_attempts = 5
+        flow = FormTestFlow(settings=settings)
+        # Simulate CLI override (as main.py does)
+        flow.state.max_pages = 99
+        flow.state.max_retries = 7
+        assert flow.state.max_pages == 99
+        assert flow.state.max_retries == 7
 
 
 class TestMultipleTestCases:

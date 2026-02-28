@@ -1,4 +1,5 @@
 """Tests for browser tools (using mock page objects)."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -92,9 +93,7 @@ class TestDatePickerTool:
 class TestUploadFileTool:
     def test_file_not_found(self, mock_page):
         tool = UploadFileTool(page=mock_page)
-        result = tool._run(
-            selector="#upload", file_path="/nonexistent/file.pdf"
-        )
+        result = tool._run(selector="#upload", file_path="/nonexistent/file.pdf")
         assert "FAILED" in result
 
 
@@ -121,3 +120,40 @@ class TestScreenshotTool:
         result = tool._run(save_path=path)
         assert "SUCCESS" in result
         mock_page.screenshot.assert_called_once()
+
+    def test_default_screenshot_dir(self, mock_page):
+        tool = ScreenshotTool(page=mock_page)
+        assert tool.screenshot_dir == "reports/screenshots"
+
+    def test_custom_screenshot_dir(self, mock_page, tmp_path):
+        custom_dir = str(tmp_path / "custom_shots")
+        tool = ScreenshotTool(page=mock_page, screenshot_dir=custom_dir)
+        result = tool._run()
+        assert "SUCCESS" in result
+        mock_page.screenshot.assert_called_once()
+        call_args = mock_page.screenshot.call_args
+        # The path should be within the custom directory
+        called_path = call_args.kwargs.get("path", "")
+        assert custom_dir in called_path
+
+
+class TestScreenshotAnalysisToolConfig:
+    def test_default_screenshot_dir(self, mock_page):
+        from src.tools.screenshot_analysis_tool import ScreenshotAnalysisTool
+
+        tool = ScreenshotAnalysisTool(page=mock_page)
+        assert tool.screenshot_dir == "reports/screenshots"
+
+    def test_custom_screenshot_dir(self, mock_page, tmp_path):
+        from src.tools.screenshot_analysis_tool import ScreenshotAnalysisTool
+
+        custom_dir = str(tmp_path / "custom_analysis")
+        tool = ScreenshotAnalysisTool(
+            page=mock_page,
+            screenshot_dir=custom_dir,
+            vlm_model="test-model",
+            vlm_api_key="test-key",
+        )
+        # The tool should use the custom directory for screenshots
+        # We can't run _run fully without VLM, but we can verify the field is set
+        assert tool.screenshot_dir == custom_dir

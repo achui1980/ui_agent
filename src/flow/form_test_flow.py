@@ -63,6 +63,9 @@ class FormTestFlow(Flow[FormTestState]):
         super().__init__(**kwargs)
         self._settings = settings or get_settings()
         self._browser_manager: BrowserManager | None = None
+        # Connect config to state defaults
+        self.state.max_pages = self._settings.awa_max_steps
+        self.state.max_retries = self._settings.awa_max_healing_attempts
 
     @start()
     def parse_test_case(self) -> str:

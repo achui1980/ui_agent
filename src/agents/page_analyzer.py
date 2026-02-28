@@ -12,9 +12,10 @@ from src.tools.screenshot_analysis_tool import ScreenshotAnalysisTool
 def create_page_analyzer(
     page: Page, llm: LLM, settings: Settings | None = None
 ) -> Agent:
+    screenshot_dir = settings.awa_screenshot_dir if settings else "reports/screenshots"
     tools = [
         DOMExtractorTool(page=page),
-        ScreenshotTool(page=page),
+        ScreenshotTool(page=page, screenshot_dir=screenshot_dir),
     ]
 
     # Add VLM-powered screenshot analysis if settings are available
@@ -26,6 +27,7 @@ def create_page_analyzer(
                 vlm_api_key=settings.openai_api_key,
                 vlm_api_base=settings.openai_api_base,
                 vlm_max_tokens=settings.vlm_max_tokens,
+                screenshot_dir=screenshot_dir,
             )
         )
 
