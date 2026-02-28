@@ -1,65 +1,65 @@
-# API Documentation
+# API 文档
 
-**AI-DLC Stage:** Inception / Reverse Engineering
-**Date:** 2026-02-28
-**Project:** UI Agent - AI-powered web form testing system
+**AI-DLC 阶段：** 启动 / 逆向工程
+**日期：** 2026-02-28
+**项目：** UI Agent - 基于 AI 的 Web 表单测试系统
 
 ---
 
 ## CLI API
 
-The CLI is implemented with Click in `src/main.py` and installed as the `ui-agent` console script via `pyproject.toml`. All commands require the `ui_agent` conda environment to be activated first.
+CLI 基于 Click 实现，位于 `src/main.py`，通过 `pyproject.toml` 注册为 `ui-agent` 控制台脚本。所有命令执行前需先激活 `ui_agent` conda 环境。
 
 ### `ui-agent run`
 
-Full form test execution.
+完整的表单测试执行。
 
 ```
 ui-agent run <test_file> --url <url> [--max-pages N] [--max-retries N]
 ```
 
-**Arguments:**
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `test_file` | positional | Yes | -- | Path to test data file (.json, .yaml, .yml, .csv, .xlsx, .xls, .txt) |
-| `--url`, `-u` | option | Yes | -- | Target form URL |
-| `--max-pages` | option | No | 50 | Maximum pages to process before stopping |
-| `--max-retries` | option | No | 3 | Maximum retries per page on verification failure |
+**参数：**
+| 参数 | 类型 | 必填 | 默认值 | 描述 |
+|------|------|------|-------|------|
+| `test_file` | 位置参数 | 是 | -- | 测试数据文件路径（.json、.yaml、.yml、.csv、.xlsx、.xls、.txt） |
+| `--url`, `-u` | 选项 | 是 | -- | 目标表单 URL |
+| `--max-pages` | 选项 | 否 | 50 | 最大处理页数 |
+| `--max-retries` | 选项 | 否 | 3 | 验证失败时每页最大重试次数 |
 
-**Behavior:**
-1. For `.txt` (NL) files: Creates a single `FormTestFlow`, sets state, and calls `kickoff()`. The flow handles browser startup, DOM extraction, NL parsing, and form testing internally.
-2. For all other formats: Parses test cases upfront via `parse_test_file()`. Loops over each test case, creating a new `FormTestFlow` per case. Each flow opens a fresh browser, processes all form pages, generates reports, and closes the browser.
+**行为：**
+1. 对于 `.txt`（NL）文件：创建单个 `FormTestFlow`，设置状态后调用 `kickoff()`。Flow 内部处理浏览器启动、DOM 提取、NL 解析和表单测试。
+2. 对于其他格式：先通过 `parse_test_file()` 解析测试用例。遍历每个测试用例，为每个用例创建新的 `FormTestFlow`。每个 Flow 打开新浏览器、处理所有表单页面、生成报告并关闭浏览器。
 
-**Output:**
-- JSON report: `reports/{test_case_id}_report.json`
-- HTML report: `reports/{test_case_id}_report.html`
-- Screenshots: `reports/screenshots/page_{timestamp}.png`
-- Logs: `reports/ui_agent.log` (DEBUG level, rotated at 10MB)
-- Stdout: Progress logging with test case IDs and final status summary
+**输出：**
+- JSON 报告：`reports/{test_case_id}_report.json`
+- HTML 报告：`reports/{test_case_id}_report.html`
+- 截图：`reports/screenshots/page_{timestamp}.png`
+- 日志：`reports/ui_agent.log`（DEBUG 级别，10MB 轮转）
+- 标准输出：进度日志（含测试用例 ID）及最终状态摘要
 
-**Exit behavior:** Does not set non-zero exit codes on test failure (logs only).
+**退出行为：** 测试失败时不设置非零退出码（仅记录日志）。
 
 ---
 
 ### `ui-agent validate`
 
-Parse and validate a test case file without executing form tests.
+仅解析和验证测试用例文件，不执行表单测试。
 
 ```
 ui-agent validate <test_file> [--url <url>]
 ```
 
-**Arguments:**
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `test_file` | positional | Yes | -- | Path to test data file |
-| `--url`, `-u` | option | Conditional | `""` | Target URL. **Required for `.txt` files** (NL parsing needs browser context) |
+**参数：**
+| 参数 | 类型 | 必填 | 默认值 | 描述 |
+|------|------|------|-------|------|
+| `test_file` | 位置参数 | 是 | -- | 测试数据文件路径 |
+| `--url`, `-u` | 选项 | 有条件 | `""` | 目标 URL。**`.txt` 文件必填**（NL 解析需要浏览器上下文） |
 
-**Behavior:**
-1. For `.txt` files: Validates that `--url` is provided. Starts a browser, navigates to the URL, extracts DOM fields via `DOMExtractorTool`, then parses the NL text with page context. Closes browser in `finally` block.
-2. For other formats: Parses directly without browser.
+**行为：**
+1. 对于 `.txt` 文件：验证是否提供了 `--url`。启动浏览器，导航到 URL，通过 `DOMExtractorTool` 提取 DOM 字段，然后使用页面上下文解析 NL 文本。在 `finally` 块中关闭浏览器。
+2. 对于其他格式：直接解析，无需浏览器。
 
-**Output (stdout):**
+**输出（标准输出）：**
 ```
 Parsed N test case(s):
 
@@ -75,31 +75,31 @@ Parsed N test case(s):
   }
 ```
 
-**Exit codes:** Exits with code 1 if URL missing for `.txt` or if parsing fails.
+**退出码：** `.txt` 文件缺少 URL 或解析失败时以退出码 1 退出。
 
 ---
 
 ### `ui-agent analyze`
 
-Analyze a single page's form fields without filling.
+分析单个页面的表单字段，不进行填写。
 
 ```
 ui-agent analyze <url> [--visual/--no-visual]
 ```
 
-**Arguments:**
-| Parameter | Type | Required | Default | Description |
-|-----------|------|----------|---------|-------------|
-| `url` | positional | Yes | -- | Page URL to analyze |
-| `--visual/--no-visual` | flag | No | `--visual` | Enable/disable VLM visual analysis |
+**参数：**
+| 参数 | 类型 | 必填 | 默认值 | 描述 |
+|------|------|------|-------|------|
+| `url` | 位置参数 | 是 | -- | 要分析的页面 URL |
+| `--visual/--no-visual` | 标志 | 否 | `--visual` | 启用/禁用 VLM 视觉分析 |
 
-**Behavior:**
-1. Starts browser, navigates to URL
-2. Runs `DOMExtractorTool` -- extracts all form fields, buttons, step indicators, validation errors
-3. Runs `ScreenshotTool` -- saves page screenshot
-4. If `--visual` and `vlm_model` is configured: runs `ScreenshotAnalysisTool` -- VLM analysis of screenshot
+**行为：**
+1. 启动浏览器，导航到 URL
+2. 运行 `DOMExtractorTool` -- 提取所有表单字段、按钮、步骤指示器、验证错误
+3. 运行 `ScreenshotTool` -- 保存页面截图
+4. 若启用 `--visual` 且配置了 `vlm_model`：运行 `ScreenshotAnalysisTool` -- VLM 截图分析
 
-**Output (stdout):**
+**输出（标准输出）：**
 ```
 === DOM Extraction ===
 {
@@ -121,54 +121,54 @@ The page shows a multi-step insurance form...
 
 ---
 
-## Environment Variables
+## 环境变量
 
-All configuration is loaded from a `.env` file by `pydantic-settings` into `src/config.py:Settings`.
+所有配置通过 `.env` 文件加载，由 `pydantic-settings` 读入 `src/config.py:Settings`。
 
-### LLM Configuration
+### LLM 配置
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `OPENAI_API_KEY` | str | `""` | API key for LLM and VLM calls |
-| `OPENAI_API_BASE` | str | `""` | Custom API base URL (for proxies or alternative providers) |
-| `HTTPS_PROXY` | str | `""` | HTTPS proxy for outbound requests |
-| `LLM_MODEL` | str | `"gpt-5.2"` | Model name for text LLM (used by all 4 agents) |
-| `VLM_MODEL` | str | `"gpt-5.2"` | Model name for vision LLM (used by ScreenshotAnalysisTool) |
-| `LLM_MAX_TOKENS` | int | `4096` | Max tokens for text LLM responses |
-| `VLM_MAX_TOKENS` | int | `1000` | Max tokens for VLM responses |
+| 变量 | 类型 | 默认值 | 描述 |
+|------|------|-------|------|
+| `OPENAI_API_KEY` | str | `""` | LLM 和 VLM 调用的 API 密钥 |
+| `OPENAI_API_BASE` | str | `""` | 自定义 API 基础 URL（用于代理或替代提供商） |
+| `HTTPS_PROXY` | str | `""` | 出站请求的 HTTPS 代理 |
+| `LLM_MODEL` | str | `"gpt-5.2"` | 文本 LLM 模型名称（4 个智能体共用） |
+| `VLM_MODEL` | str | `"gpt-5.2"` | 视觉 LLM 模型名称（ScreenshotAnalysisTool 使用） |
+| `LLM_MAX_TOKENS` | int | `4096` | 文本 LLM 响应最大 token 数 |
+| `VLM_MAX_TOKENS` | int | `1000` | VLM 响应最大 token 数 |
 
-### Browser Configuration
+### 浏览器配置
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `BROWSER_HEADLESS` | bool | `False` | Run browser in headless mode |
-| `BROWSER_TIMEOUT` | int | `10000` | Default action timeout (ms) |
-| `BROWSER_NAVIGATION_TIMEOUT` | int | `60000` | Navigation timeout (ms) |
-| `BROWSER_VIEWPORT_WIDTH` | int | `1280` | Browser viewport width (px) |
-| `BROWSER_VIEWPORT_HEIGHT` | int | `720` | Browser viewport height (px) |
-| `BROWSER_PROXY` | str | `""` | Browser proxy server URL |
+| 变量 | 类型 | 默认值 | 描述 |
+|------|------|-------|------|
+| `BROWSER_HEADLESS` | bool | `False` | 以无头模式运行浏览器 |
+| `BROWSER_TIMEOUT` | int | `10000` | 默认操作超时（毫秒） |
+| `BROWSER_NAVIGATION_TIMEOUT` | int | `60000` | 导航超时（毫秒） |
+| `BROWSER_VIEWPORT_WIDTH` | int | `1280` | 浏览器视口宽度（像素） |
+| `BROWSER_VIEWPORT_HEIGHT` | int | `720` | 浏览器视口高度（像素） |
+| `BROWSER_PROXY` | str | `""` | 浏览器代理服务器 URL |
 
-### Agent/Workflow Configuration
+### 智能体/工作流配置
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `AWA_MAX_STEPS` | int | `50` | Maximum pages to process per test run (maps to `max_pages` state) |
-| `AWA_MAX_HEALING_ATTEMPTS` | int | `3` | Maximum retries per page (maps to `max_retries` state) |
-| `AWA_SCREENSHOT_DIR` | str | `"reports/screenshots"` | Directory for saving screenshots |
+| 变量 | 类型 | 默认值 | 描述 |
+|------|------|-------|------|
+| `AWA_MAX_STEPS` | int | `50` | 每次测试运行最大处理页数（映射到 `max_pages` 状态） |
+| `AWA_MAX_HEALING_ATTEMPTS` | int | `3` | 每页最大重试次数（映射到 `max_retries` 状态） |
+| `AWA_SCREENSHOT_DIR` | str | `"reports/screenshots"` | 截图保存目录 |
 
-### Logging Configuration
+### 日志配置
 
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `LOG_LEVEL` | str | `"INFO"` | Stderr log level (DEBUG, INFO, WARNING, ERROR) |
+| 变量 | 类型 | 默认值 | 描述 |
+|------|------|-------|------|
+| `LOG_LEVEL` | str | `"INFO"` | stderr 日志级别（DEBUG、INFO、WARNING、ERROR） |
 
 ---
 
-## Test Data Formats
+## 测试数据格式
 
-The system supports 6 input formats. All formats produce `list[TestCase]` where each `TestCase` has: `test_id`, `url`, `data` (dict of field_name -> value), `description`, `expected_outcome`.
+系统支持 6 种输入格式。所有格式均产出 `list[TestCase]`，每个 `TestCase` 包含：`test_id`、`url`、`data`（字段名 -> 值的字典）、`description`、`expected_outcome`。
 
-### JSON -- Structured Format
+### JSON -- 结构化格式
 
 ```json
 [
@@ -186,9 +186,9 @@ The system supports 6 input formats. All formats produce `list[TestCase]` where 
 ]
 ```
 
-A single object (not wrapped in array) is also accepted. Multiple objects in the array produce multiple test cases.
+也接受单个对象（不包裹在数组中）。数组中的多个对象会产出多个测试用例。
 
-### JSON -- Flat Format
+### JSON -- 扁平格式
 
 ```json
 {
@@ -198,7 +198,7 @@ A single object (not wrapped in array) is also accepted. Multiple objects in the
 }
 ```
 
-When no `data` key is present, the entire object is treated as field->value data. `test_id` is auto-generated as `json_1`, `json_2`, etc.
+当不存在 `data` 键时，整个对象被视为字段->值数据。`test_id` 自动生成为 `json_1`、`json_2` 等。
 
 ### YAML
 
@@ -212,7 +212,7 @@ data:
   email: john@example.com
 ```
 
-Same structure as JSON. Supports both structured (with `data` key) and flat formats. Lists of objects produce multiple test cases.
+与 JSON 结构相同。支持结构化（带 `data` 键）和扁平格式。对象列表产出多个测试用例。
 
 ### CSV
 
@@ -222,13 +222,13 @@ insurance_1,John,Smith,john@example.com,01/15/1990,success
 insurance_2,Jane,Doe,jane@example.com,03/22/1985,success
 ```
 
-First row is headers. Columns named `test_id`, `url`, `description`, `expected_outcome` are metadata; all others are data fields. Each data row is one test case. Empty values are skipped.
+第一行为表头。名为 `test_id`、`url`、`description`、`expected_outcome` 的列为元数据；其余均为数据字段。每行数据为一个测试用例。空值会被跳过。
 
-### Excel (.xlsx, .xls)
+### Excel（.xlsx、.xls）
 
-Same structure as CSV. First row is headers, subsequent rows are test cases. Uses `openpyxl` for reading. Same meta key separation. Requires `openpyxl` to be installed.
+与 CSV 结构相同。第一行为表头，后续行为测试用例。使用 `openpyxl` 读取。元数据键分离方式相同。需要安装 `openpyxl`。
 
-### Natural Language (.txt)
+### 自然语言（.txt）
 
 ```
 Fill out the insurance form for John Smith, born January 15, 1990.
@@ -236,17 +236,17 @@ Email is john@example.com, phone number 555-123-4567.
 He lives in Illinois and is male.
 ```
 
-**Requirements:** `--url` flag is mandatory. The system:
-1. Opens browser and navigates to the target URL
-2. Extracts DOM field info (labels, types, options) as `page_context`
-3. Sends LLM prompt with form fields + user text
-4. LLM returns structured JSON with `test_id`, `data`, `description`
+**要求：** `--url` 标志为必填项。系统处理流程：
+1. 打开浏览器并导航到目标 URL
+2. 提取 DOM 字段信息（标签、类型、选项）作为 `page_context`
+3. 发送含表单字段 + 用户文本的 LLM 提示
+4. LLM 返回包含 `test_id`、`data`、`description` 的结构化 JSON
 
-Field keys are derived from form labels (snake_case) rather than raw DOM IDs. Date values are kept in natural format -- the downstream form filler agent handles format conversion.
+字段键从表单标签派生（snake_case），而非原始 DOM ID。日期值保持自然格式——下游表单填写智能体负责格式转换。
 
 ---
 
-## Internal API
+## 内部 API
 
 ### Flow API
 
@@ -269,16 +269,16 @@ result = flow.kickoff()  # Returns dict (TestReport.model_dump())
 from src.parsers.parser_factory import parse_test_file
 from src.config import get_settings
 
-# Structured formats
+# 结构化格式
 test_cases = parse_test_file("test.json", "https://example.com", get_settings())
 
-# NL format (requires page_context)
+# NL 格式（需要 page_context）
 test_cases = parse_test_file("test.txt", "https://example.com", settings, page_context=dom_dict)
 ```
 
 ### Tool API
 
-All tools follow this pattern:
+所有工具遵循以下模式：
 
 ```python
 from src.tools.fill_input_tool import FillInputTool

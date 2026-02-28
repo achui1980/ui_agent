@@ -1,42 +1,42 @@
-# AI-DLC State
+# AI-DLC 项目状态
 
-## Project Information
-- **Project Name**: UI Agent
-- **Project Type**: Brownfield
-- **Workspace Root**: `/Users/portz/js/ui_agent`
-- **Primary Language**: Python 3.11+
-- **Framework**: CrewAI + Playwright
-- **Description**: AI-powered web form testing system with multi-agent orchestration
+## 项目信息
+- **项目名称**: UI Agent
+- **项目类型**: 棕地项目（Brownfield）
+- **工作区根目录**: `/Users/portz/js/ui_agent`
+- **主要语言**: Python 3.11+
+- **框架**: CrewAI + Playwright
+- **描述**: 基于 AI 多智能体协作的 Web 表单自动化测试系统
 
-## Extension Configuration
-| Extension | Enabled | Rationale |
-|-----------|---------|-----------|
-| Security Baseline | TBD | To be determined during Requirements Analysis |
+## 扩展配置
+| 扩展 | 启用状态 | 说明 |
+|------|---------|------|
+| 安全基线 | 待定 | 在需求分析阶段确定 |
 
-## Stage Progress
+## 阶段进度
 
-### Inception Phase
-| Stage | Status | Timestamp | Notes |
-|-------|--------|-----------|-------|
-| Workspace Detection | COMPLETED | 2026-02-28T12:10:00Z | Brownfield detected |
-| Reverse Engineering | COMPLETED | 2026-02-28T12:15:00Z | 9 artifacts generated, awaiting approval |
-| Requirements Analysis | NOT STARTED | | |
-| User Stories | NOT STARTED | | |
-| Workflow Planning | NOT STARTED | | |
-| Application Design | NOT STARTED | | |
-| Units Generation | NOT STARTED | | |
+### 启动阶段（Inception）
+| 阶段 | 状态 | 时间戳 | 备注 |
+|------|------|--------|------|
+| 工作区检测 | 已完成 | 2026-02-28T12:10:00Z | 检测为棕地项目 |
+| 逆向工程 | 已完成 | 2026-02-28T12:15:00Z | 已生成 9 份文档，待审批 |
+| 需求分析 | 未开始 | | |
+| 用户故事 | 未开始 | | |
+| 工作流规划 | 未开始 | | |
+| 应用设计 | 未开始 | | |
+| 工作单元生成 | 未开始 | | |
 
-### Construction Phase
-| Stage | Status | Timestamp | Notes |
-|-------|--------|-----------|-------|
-| Functional Design | NOT STARTED | | |
-| NFR Requirements | NOT STARTED | | |
-| NFR Design | NOT STARTED | | |
-| Infrastructure Design | NOT STARTED | | |
-| Code Generation | NOT STARTED | | |
-| Build and Test | NOT STARTED | | |
+### 构建阶段（Construction）
+| 阶段 | 状态 | 时间戳 | 备注 |
+|------|------|--------|------|
+| 功能设计 | 未开始 | | |
+| 非功能需求 | 未开始 | | |
+| 非功能设计 | 未开始 | | |
+| 基础设施设计 | 未开始 | | |
+| 代码生成 | 未开始 | | |
+| 构建与测试 | 未开始 | | |
 
-### Operations Phase
-| Stage | Status | Timestamp | Notes |
-|-------|--------|-----------|-------|
-| Operations | NOT STARTED | | Placeholder |
+### 运维阶段（Operations）
+| 阶段 | 状态 | 时间戳 | 备注 |
+|------|------|--------|------|
+| 运维 | 未开始 | | 占位符 |
