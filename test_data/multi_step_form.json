@@ -1,0 +1,24 @@
+[
+  {
+    "test_id": "TC010_multi_step_insurance",
+    "description": "Multi-step insurance application: personal info -> address -> coverage -> confirmation",
+    "url": "http://localhost:5555/form",
+    "expected_outcome": "success",
+    "data": {
+      "first_name": "Alice",
+      "last_name": "Johnson",
+      "email": "alice.johnson@example.com",
+      "phone": "555-987-6543",
+      "date_of_birth": "03/22/1985",
+      "gender": "Female",
+      "address": "456 Oak Avenue",
+      "city": "Portland",
+      "state": "Oregon",
+      "zip_code": "97201",
+      "coverage_type": "Family",
+      "plan_type": "Platinum",
+      "annual_income": "120000",
+      "tobacco_use": "No"
+    }
+  }
+]

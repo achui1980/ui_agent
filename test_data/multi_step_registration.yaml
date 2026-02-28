@@ -1,0 +1,20 @@
+- test_id: TC011_multi_step_registration
+  description: "Multi-step user registration: account -> profile -> preferences"
+  expected_outcome: success
+  data:
+    username: testuser2026
+    email: testuser@example.com
+    password: SecurePass123!
+    confirm_password: SecurePass123!
+    first_name: Bob
+    last_name: Williams
+    date_of_birth: "06/15/1992"
+    phone: "555-456-7890"
+    address: "789 Pine Street"
+    city: Chicago
+    state: Illinois
+    zip_code: "60601"
+    newsletter: "true"
+    theme: Dark
+    language: English
+    notifications: Email
